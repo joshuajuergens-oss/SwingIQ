@@ -264,14 +264,62 @@ SWING_PHASES = [
 STAGE_NAMES = SWING_PHASES  # alias for build_image_blocks
 
 
+def _find_top_of_backswing(cap, swing_start: int, swing_end: int, step: int = 10) -> int:
+    """
+    Scan every `step` frames between swing_start and swing_end using pose detection.
+    Returns the frame index where lead_arm_elevation peaks (top of backswing).
+    Falls back to the midpoint if pose isn't detected.
+    """
+    if not MEDIAPIPE_AVAILABLE:
+        return (swing_start + swing_end) // 2
+
+    try:
+        import mediapipe as mp
+        opts = _PoseLandmarkerOptions(
+            base_options=_BaseOptions(model_asset_path=_MODEL_PATH),
+            running_mode=_RunningMode.IMAGE,
+            num_poses=1,
+            min_pose_detection_confidence=0.4,
+            min_pose_presence_confidence=0.4,
+            min_tracking_confidence=0.4,
+        )
+        ctx = _PoseLandmarker.create_from_options(opts)
+        best_idx, best_elev = (swing_start + swing_end) // 2, -1
+
+        idx = swing_start
+        while idx <= swing_end:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ret, frame = cap.read()
+            if ret:
+                h, w = frame.shape[:2]
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                result = ctx.detect(mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb))
+                if result.pose_landmarks:
+                    angles = _pose_angles(result.pose_landmarks[0], w, h)
+                    elev = angles.get("lead_arm_elevation", -1)
+                    if elev > best_elev:
+                        best_elev, best_idx = elev, idx
+            idx += step
+
+        ctx.close()
+        print(f"  [top] top of backswing detected at frame {best_idx} (lead_arm_elevation={best_elev}°)")
+        return best_idx
+    except Exception as e:
+        print(f"  [top] detection failed ({e}) — using midpoint")
+        return (swing_start + swing_end) // 2
+
+
 def extract_frames(video_path: str, num_frames: int = 10,
                    user_start_sec: float = None, user_end_sec: float = None):
     """
-    If user_start_sec/user_end_sec are provided, use that window directly.
-    Otherwise fall back to automatic motion-detection swing start.
-    Frame 1 = one frame before the swing window starts (address).
-    Frames 2-N = evenly spaced across the swing window.
+    Sampling strategy:
+      - Frame 1: one frame before swing start (address)
+      - Backswing (start → top): every 10th frame
+      - Downswing/impact/finish (top → end): every frame, capped at MAX_DENSE frames
+    Top of backswing is detected via peak lead_arm_elevation from MediaPipe.
     """
+    MAX_DENSE = 40   # max frames to extract from top of backswing onwards
+
     cap = cv2.VideoCapture(video_path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps   = cap.get(cv2.CAP_PROP_FPS) or 30
@@ -288,21 +336,33 @@ def extract_frames(video_path: str, num_frames: int = 10,
         swing_end   = total - 1
         print(f"  [window] auto-detected: swing starts at frame {swing_start}")
 
-    # Frame 1: one frame before swing window (address position)
+    # Find top of backswing
+    top_idx = _find_top_of_backswing(cap, swing_start, swing_end, step=10)
+
+    # Address frame: one frame before swing start
     address_idx = max(0, swing_start - 1)
 
-    # Frames 2-N: evenly spaced across the swing window
-    swing_frames = num_frames - 1
-    usable = swing_end - swing_start
-    if usable < swing_frames:
-        swing_start = 0
-        usable = swing_end
+    # Backswing: every 10th frame from swing_start to top_idx
+    backswing_indices = list(range(swing_start, top_idx, 10))
+    if not backswing_indices or backswing_indices[-1] != top_idx:
+        backswing_indices.append(top_idx)
 
-    swing_indices = [swing_start + int(i * usable / max(swing_frames - 1, 1))
-                     for i in range(swing_frames)]
+    # Downswing/impact/finish: every frame from top_idx to swing_end, capped
+    dense_range = list(range(top_idx, swing_end + 1))
+    if len(dense_range) > MAX_DENSE:
+        step = len(dense_range) / MAX_DENSE
+        dense_range = [dense_range[int(i * step)] for i in range(MAX_DENSE)]
 
-    indices = [address_idx] + swing_indices
+    # Combine, deduplicate, keep order
+    seen = set()
+    indices = []
+    for idx in [address_idx] + backswing_indices + dense_range:
+        if idx not in seen:
+            seen.add(idx)
+            indices.append(idx)
+
     phases = [f"FRAME {i + 1}" for i in range(len(indices))]
+    print(f"  [frames] {len(indices)} total: 1 address + {len(backswing_indices)} backswing + {len(dense_range)} dense")
 
     frames_b64 = []
     all_angles = []   # list of dicts, one per frame
@@ -508,8 +568,8 @@ def analyze():
             saved_paths[key] = path
 
     try:
-        front_frames, front_pose = extract_frames(saved_paths["front"], num_frames=10, user_start_sec=user_start, user_end_sec=user_end) if "front" in saved_paths else ([], "")
-        back_frames,  back_pose  = extract_frames(saved_paths["back"],  num_frames=10, user_start_sec=user_start, user_end_sec=user_end) if "back"  in saved_paths else ([], "")
+        front_frames, front_pose = extract_frames(saved_paths["front"], user_start_sec=user_start, user_end_sec=user_end) if "front" in saved_paths else ([], "")
+        back_frames,  back_pose  = extract_frames(saved_paths["back"],  user_start_sec=user_start, user_end_sec=user_end) if "back"  in saved_paths else ([], "")
     except Exception as exc:
         traceback.print_exc()
         if using_free:
