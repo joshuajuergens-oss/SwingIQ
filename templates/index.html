@@ -1142,7 +1142,7 @@
     <!-- Frame viewer -->
     <div class="frames-section" id="framesSection" style="display:none">
       <div class="frames-section-title">
-        🦴 Pose Skeleton Frames <span class="badge">MediaPipe</span>
+        🦴 Key Swing Positions <span class="badge">AI-selected</span>
       </div>
       <div class="frames-tabs" id="framesTabs"></div>
       <div class="frames-grid" id="framesGrid"></div>
@@ -1450,19 +1450,15 @@
       const framesGrid    = document.getElementById('framesGrid');
       framesTabs.innerHTML = '';
       framesGrid.innerHTML = '';
-      const stageNames = ['Setup','Takeaway','Backswing','Top','Downswing','Impact/Finish'];
-
       if (data.frames && data.frames.length > 0) {
         const views = [...new Set(data.frames.map(f => f.view))];
 
         function renderFrames(filterView) {
           framesGrid.innerHTML = '';
-          const viewIdx = {};
+          let n = 0;
           data.frames.forEach(f => {
             if (filterView !== 'All' && f.view !== filterView) return;
-            viewIdx[f.view] = (viewIdx[f.view] || 0);
-            const stage = stageNames[viewIdx[f.view]] || `Frame ${viewIdx[f.view]+1}`;
-            viewIdx[f.view]++;
+            const stage = f.phase || `Frame ${++n}`;
             const card = document.createElement('div');
             card.className = 'frame-card';
             card.innerHTML = `<img src="data:image/jpeg;base64,${f.data}" alt="${f.view} ${stage}" loading="lazy"/>

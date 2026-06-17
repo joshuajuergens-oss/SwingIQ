@@ -483,8 +483,7 @@ def build_image_blocks(frames_b64: list[str], label: str) -> list[dict]:
     """Turn a list of base64 frames into Claude content blocks with captions."""
     blocks = []
     for i, b64 in enumerate(frames_b64):
-        stage = STAGE_NAMES[i] if i < len(STAGE_NAMES) else f"Frame {i+1}"
-        blocks.append({"type": "text", "text": f"{label} — {stage} (frame {i+1} of {len(frames_b64)})"})
+        blocks.append({"type": "text", "text": f"{label} — frame {i+1} of {len(frames_b64)}"})
         blocks.append(
             {
                 "type": "image",
@@ -492,6 +491,83 @@ def build_image_blocks(frames_b64: list[str], label: str) -> list[dict]:
             }
         )
     return blocks
+
+
+# The 9 key swing positions to surface in the results, in time order
+KEY_FRAME_PHASES = [
+    "Start (Address)",
+    "Early Backswing",
+    "Mid Backswing",
+    "Late Backswing",
+    "Top of Backswing",
+    "Downswing",
+    "Impact",
+    "After Impact",
+    "Follow-Through",
+]
+
+
+def select_key_frames(ai_client, frames_b64: list[str], view_label: str) -> list[dict]:
+    """
+    Use Haiku 4.5 to pick the single best frame for each of the 9 swing phases.
+    Returns a list of {"phase": str, "data": base64} in phase order.
+    Falls back to even spacing if the model can't decide.
+    """
+    import re, json
+
+    n = len(frames_b64)
+    if n == 0:
+        return []
+
+    def even_fallback():
+        out = []
+        for k, phase in enumerate(KEY_FRAME_PHASES):
+            idx = min(n - 1, round(k * (n - 1) / (len(KEY_FRAME_PHASES) - 1)))
+            out.append({"phase": phase, "data": frames_b64[idx]})
+        return out
+
+    if n <= len(KEY_FRAME_PHASES):
+        return even_fallback()
+
+    blocks = [{"type": "text", "text": (
+        f"Below are {n} numbered frames from a golf swing ({view_label}), in time order (frame 1 is earliest). "
+        "Pick the ONE frame number that best shows each of these 9 swing positions, in this exact order:\n"
+        "1. Start (Address)\n2. Early Backswing\n3. Mid Backswing\n4. Late Backswing\n"
+        "5. Top of Backswing\n6. Downswing\n7. Impact\n8. After Impact\n9. Follow-Through\n\n"
+        "The frame numbers MUST increase across the list (each position happens later in time than the one before). "
+        "Reply with ONLY a JSON array of 9 integers (the chosen frame numbers in order). "
+        "Example: [1, 4, 7, 11, 15, 19, 22, 25, 31]"
+    )}]
+    for i, b64 in enumerate(frames_b64):
+        blocks.append({"type": "text", "text": f"Frame {i+1}"})
+        blocks.append({"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": b64}})
+
+    try:
+        resp = ai_client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=300,
+            messages=[{"role": "user", "content": blocks}],
+        )
+        text = "".join(b.text for b in resp.content if hasattr(b, "text"))
+        match = re.search(r"\[[\d,\s]+\]", text)
+        nums = json.loads(match.group(0)) if match else []
+    except Exception as e:
+        print(f"  [select] {view_label} frame selection failed ({e}) — using even spacing")
+        return even_fallback()
+
+    if len(nums) < len(KEY_FRAME_PHASES):
+        print(f"  [select] {view_label} returned {len(nums)} frames — using even spacing")
+        return even_fallback()
+
+    selected = []
+    last_idx = -1
+    for phase, raw in zip(KEY_FRAME_PHASES, nums):
+        idx = max(0, min(n - 1, int(raw) - 1))
+        idx = max(idx, last_idx + 1) if last_idx + 1 < n else idx  # keep increasing when possible
+        last_idx = idx
+        selected.append({"phase": phase, "data": frames_b64[idx]})
+    print(f"  [select] {view_label} key frames: {[int(x) for x in nums]}")
+    return selected
 
 
 @app.route("/")
@@ -829,12 +905,22 @@ def analyze():
             refund_free_analysis(ip)
         return jsonify({"error": "Claude returned an empty response. Please try again."}), 502
 
-    # Return annotated frames so the browser can display them
+    # --- Frame selector (Haiku 4.5): pick the 9 key swing positions to display ---
+    print("Selecting 9 key frames [claude-haiku-4-5]...")
     frames_payload = []
-    for b64 in front_frames:
-        frames_payload.append({"view": "Front", "data": b64})
-    for b64 in back_frames:
-        frames_payload.append({"view": "Back", "data": b64})
+    try:
+        if front_frames:
+            for item in select_key_frames(ai_client, front_frames, "front / face-on"):
+                frames_payload.append({"view": "Front", "phase": item["phase"], "data": item["data"]})
+        if back_frames:
+            for item in select_key_frames(ai_client, back_frames, "back / down-the-line"):
+                frames_payload.append({"view": "Back", "phase": item["phase"], "data": item["data"]})
+    except Exception as exc:
+        print(f"  [select] failed, returning all frames: {exc}")
+        for b64 in front_frames:
+            frames_payload.append({"view": "Front", "phase": "", "data": b64})
+        for b64 in back_frames:
+            frames_payload.append({"view": "Back", "phase": "", "data": b64})
 
     return jsonify({
         "analysis": analysis_text,
