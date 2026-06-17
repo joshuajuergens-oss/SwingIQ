@@ -476,7 +476,7 @@ def extract_frames(video_path: str, num_frames: int = 10,
             lines.append(f"  {stage}: {', '.join(parts)}")
         pose_summary = "\n".join(lines)
 
-    return frames_b64, pose_summary
+    return frames_b64, pose_summary, all_angles
 
 
 def build_image_blocks(frames_b64: list[str], label: str) -> list[dict]:
@@ -507,17 +507,21 @@ KEY_FRAME_PHASES = [
 ]
 
 
-def select_key_frames(ai_client, frames_b64: list[str], view_label: str) -> list[dict]:
+def select_key_frames(ai_client, frames_b64: list[str], view_label: str,
+                      angles: list[dict] = None) -> list[dict]:
     """
     Use Haiku 4.5 to pick the single best frame for each of the 9 swing phases.
+    The per-frame MediaPipe joint angles (when available) are given to the model
+    as objective grounding so phase labels line up with what the body is doing.
+    The top of backswing is anchored to peak lead-arm elevation.
     Returns a list of {"phase": str, "data": base64} in phase order.
-    Falls back to even spacing if the model can't decide.
     """
     import re, json
 
     n = len(frames_b64)
     if n == 0:
         return []
+    angles = angles or [{} for _ in range(n)]
 
     def even_fallback():
         out = []
@@ -529,12 +533,56 @@ def select_key_frames(ai_client, frames_b64: list[str], view_label: str) -> list
     if n <= len(KEY_FRAME_PHASES):
         return even_fallback()
 
+    # Anchor the top of backswing = frame with highest lead-arm elevation
+    top_frame = None
+    best_elev = -1
+    for i, a in enumerate(angles):
+        elev = a.get("lead_arm_elevation", -1) if a else -1
+        if elev > best_elev:
+            best_elev, top_frame = elev, i + 1  # 1-based
+
+    # Build a compact per-frame angle table for the model
+    angle_lines = []
+    for i, a in enumerate(angles):
+        if a:
+            angle_lines.append(
+                f"Frame {i+1}: lead_arm_elevation={a.get('lead_arm_elevation','?')}°, "
+                f"shoulder_tilt={a.get('shoulder_tilt','?')}°, "
+                f"spine_angle={a.get('spine_angle','?')}°, "
+                f"lead_elbow={a.get('left_elbow','?')}°"
+            )
+        else:
+            angle_lines.append(f"Frame {i+1}: (pose not detected)")
+    angle_table = "\n".join(angle_lines)
+
+    top_hint = (
+        f"\n\nIMPORTANT: Based on body-tracking data, the TOP OF BACKSWING is at or very near "
+        f"FRAME {top_frame} (this is where the lead arm is highest, {best_elev}°). "
+        f"Frames before it are the backswing; frames after it are the downswing, impact, and follow-through. "
+        f"Use this as your anchor."
+        if top_frame else ""
+    )
+
     blocks = [{"type": "text", "text": (
         f"Below are {n} numbered frames from a golf swing ({view_label}), in time order (frame 1 is earliest). "
+        "Each frame has body-tracking measurements you should use to judge what part of the swing it is:\n\n"
+        f"{angle_table}\n"
+        f"{top_hint}\n\n"
+        "Reading the angles:\n"
+        "- Lead arm elevation rises through the backswing, PEAKS at the top, then falls through the downswing.\n"
+        "- At address it is low (~30-40°). At the top it is highest. At impact it is low again.\n"
+        "- Shoulder tilt and spine angle change as the body rotates and unwinds.\n\n"
         "Pick the ONE frame number that best shows each of these 9 swing positions, in this exact order:\n"
-        "1. Start (Address)\n2. Early Backswing\n3. Mid Backswing\n4. Late Backswing\n"
-        "5. Top of Backswing\n6. Downswing\n7. Impact\n8. After Impact\n9. Follow-Through\n\n"
-        "The frame numbers MUST increase across the list (each position happens later in time than the one before). "
+        "1. Start (Address) — setup, before any motion\n"
+        "2. Early Backswing — club just starting back, arms low\n"
+        "3. Mid Backswing — lead arm roughly parallel to ground\n"
+        "4. Late Backswing — nearly at the top, arm elevation high and still rising\n"
+        "5. Top of Backswing — lead arm elevation at its PEAK (use the anchor above)\n"
+        "6. Downswing — arm elevation dropping, before impact\n"
+        "7. Impact — club meets the ball, arms low and extended\n"
+        "8. After Impact — just past the ball, arms extending toward target\n"
+        "9. Follow-Through — body rotated to finish\n\n"
+        "Frame numbers MUST strictly increase across the list. "
         "Reply with ONLY a JSON array of 9 integers (the chosen frame numbers in order). "
         "Example: [1, 4, 7, 11, 15, 19, 22, 25, 31]"
     )}]
@@ -559,6 +607,10 @@ def select_key_frames(ai_client, frames_b64: list[str], view_label: str) -> list
         print(f"  [select] {view_label} returned {len(nums)} frames — using even spacing")
         return even_fallback()
 
+    # Force the top-of-backswing pick (index 4) to the angle-detected anchor
+    if top_frame:
+        nums[4] = top_frame
+
     selected = []
     last_idx = -1
     for phase, raw in zip(KEY_FRAME_PHASES, nums):
@@ -566,7 +618,7 @@ def select_key_frames(ai_client, frames_b64: list[str], view_label: str) -> list
         idx = max(idx, last_idx + 1) if last_idx + 1 < n else idx  # keep increasing when possible
         last_idx = idx
         selected.append({"phase": phase, "data": frames_b64[idx]})
-    print(f"  [select] {view_label} key frames: {[int(x) for x in nums]}")
+    print(f"  [select] {view_label} key frames: {[int(x) for x in nums]} (top anchored at {top_frame})")
     return selected
 
 
@@ -644,8 +696,8 @@ def analyze():
             saved_paths[key] = path
 
     try:
-        front_frames, front_pose = extract_frames(saved_paths["front"], user_start_sec=user_start, user_end_sec=user_end) if "front" in saved_paths else ([], "")
-        back_frames,  back_pose  = extract_frames(saved_paths["back"],  user_start_sec=user_start, user_end_sec=user_end) if "back"  in saved_paths else ([], "")
+        front_frames, front_pose, front_angles = extract_frames(saved_paths["front"], user_start_sec=user_start, user_end_sec=user_end) if "front" in saved_paths else ([], "", [])
+        back_frames,  back_pose,  back_angles  = extract_frames(saved_paths["back"],  user_start_sec=user_start, user_end_sec=user_end) if "back"  in saved_paths else ([], "", [])
     except Exception as exc:
         traceback.print_exc()
         if using_free:
@@ -910,10 +962,10 @@ def analyze():
     frames_payload = []
     try:
         if front_frames:
-            for item in select_key_frames(ai_client, front_frames, "front / face-on"):
+            for item in select_key_frames(ai_client, front_frames, "front / face-on", front_angles):
                 frames_payload.append({"view": "Front", "phase": item["phase"], "data": item["data"]})
         if back_frames:
-            for item in select_key_frames(ai_client, back_frames, "back / down-the-line"):
+            for item in select_key_frames(ai_client, back_frames, "back / down-the-line", back_angles):
                 frames_payload.append({"view": "Back", "phase": item["phase"], "data": item["data"]})
     except Exception as exc:
         print(f"  [select] failed, returning all frames: {exc}")
