@@ -874,17 +874,9 @@ def analyze():
         synthesis_blocks.append({
             "type": "text",
             "text": (
-                "Your first job is to watch the whole swing and decide for yourself what is happening in each numbered frame. "
-                "Use the pose angle measurements AND what you can see in the images — do not assume the frames are evenly spaced through the swing. "
-                "Look at joint angles, body positions, and club position to determine the exact phase. "
-                "Once you have named every frame, use those names throughout the rest of your report so the golfer always knows exactly which moment you are talking about.\n\n"
                 "Write the final coaching report in plain, everyday language anyone can understand — even "
                 "someone who has never played golf. Explain any golf term in brackets immediately. "
                 "Use exactly this structure:\n\n"
-                "## Frame-by-Frame Breakdown\n"
-                "For each frame: state the frame number, the swing phase you identified (e.g. Address, Takeaway, Top of Backswing, Impact, Follow-Through, Finish), "
-                "and one sentence on the most important thing happening in that frame. "
-                "Example: **Frame 3 — Top of Backswing:** The club has reached its highest point and the shoulders are fully rotated.\n\n"
                 "## Quick Summary\n"
                 "2-3 sentences on the overall picture, honest and encouraging.\n\n"
                 "## Where the Coaches Agree\n"
