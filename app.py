@@ -399,6 +399,16 @@ def usage_status():
     return jsonify({"free_remaining": remaining, "free_limit": FREE_LIMIT})
 
 
+@app.route("/debug-status")
+def debug_status():
+    return jsonify({
+        "mediapipe_available": MEDIAPIPE_AVAILABLE,
+        "model_path": _MODEL_PATH if MEDIAPIPE_AVAILABLE else None,
+        "model_exists": os.path.exists(_MODEL_PATH) if MEDIAPIPE_AVAILABLE else False,
+        "server_key_len": len(os.environ.get("ANTHROPIC_API_KEY", "")),
+    })
+
+
 @app.route("/analyze", methods=["POST"])
 def analyze():
     front_file = request.files.get("front_video")
