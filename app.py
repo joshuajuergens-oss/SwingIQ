@@ -304,6 +304,7 @@ def extract_frames(video_path: str, num_frames: int = 6):
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 result = pose_ctx.detect(mp_image)
 
+                print(f"  [pose] frame {frame_num}: detected={bool(result.pose_landmarks)}")
                 if result.pose_landmarks:
                     lms = result.pose_landmarks[0]  # first (only) pose
                     frame_angles = _pose_angles(lms, w, h)
