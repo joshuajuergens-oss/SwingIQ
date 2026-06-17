@@ -268,7 +268,7 @@ def extract_frames(video_path: str, num_frames: int = 10):
     """
     Frame 1 = one frame BEFORE swing start (address position).
     Frames 2-N = evenly spaced from swing start to end of video.
-    Each frame is labelled with its swing phase and the label is burned in.
+    Frames are numbered only — Claude identifies the swing phase from the image.
 
     Returns:
         frames_b64  : list of base64 JPEG strings (annotated if MediaPipe available)
@@ -297,13 +297,7 @@ def extract_frames(video_path: str, num_frames: int = 10):
                      for i in range(swing_frames)]
 
     indices = [address_idx] + swing_indices
-
-    # Build phase labels: first frame is always ADDRESS, rest distributed across phases
-    phases = [SWING_PHASES[0]]  # ADDRESS for frame 1
-    remaining_phases = SWING_PHASES[1:]
-    for i in range(swing_frames):
-        phase_idx = int(i * (len(remaining_phases) - 1) / max(swing_frames - 1, 1))
-        phases.append(remaining_phases[phase_idx])
+    phases = [f"FRAME {i + 1}" for i in range(len(indices))]
 
     frames_b64 = []
     all_angles = []   # list of dicts, one per frame
@@ -337,8 +331,8 @@ def extract_frames(video_path: str, num_frames: int = 10):
             frame = cv2.resize(frame, (960, int(h * scale)))
         h, w = frame.shape[:2]
 
-        # Burn phase label into frame
-        label = f"FRAME {frame_num + 1}: {phase}"
+        # Burn frame number into corner — Claude will name the swing phase
+        label = f"FRAME {frame_num + 1}"
         font = cv2.FONT_HERSHEY_SIMPLEX
         (tw, th), _ = cv2.getTextSize(label, font, 0.65, 2)
         cv2.rectangle(frame, (0, h - th - 14), (tw + 10, h), (0, 0, 0), -1)
@@ -627,10 +621,16 @@ def analyze():
         blocks.append({
             "type": "text",
             "text": (
-                "Examine the swing strictly from your specialty. List EVERY issue you can find in your area — "
-                "do not limit yourself to the most important ones. Minor flaws count too. For each issue give:\n"
+                "First, look at each numbered frame and identify what phase of the swing it shows "
+                "(e.g. address, takeaway, top of backswing, impact, follow-through, finish). "
+                "Use the pose measurements and what you can see in the image to decide — do not assume the frames are evenly spaced through the swing.\n\n"
+                "Then examine the swing strictly from your specialty. List EVERY issue you can find in your area — "
+                "do not limit yourself to the most important ones. Minor flaws count too. "
+                "When referencing a frame, use both the frame number AND the phase you identified (e.g. 'Frame 4 (impact)'). "
+                "For each issue give:\n"
                 "- A short plain-English title\n"
                 "- What you see (1-2 sentences, simple language a non-golfer understands; explain any golf term in brackets)\n"
+                "- Which frame(s) show it\n"
                 "- How serious it is: MAJOR, MODERATE, or MINOR\n\n"
                 "Also list anything in your specialty the golfer does WELL.\n"
                 "Be honest and thorough — another coach will cross-check your findings."
@@ -677,9 +677,14 @@ def analyze():
         synthesis_blocks.append({
             "type": "text",
             "text": (
-                "Write the final coaching report in plain, everyday language anyone can understand — even "
+                "Start by examining each numbered frame yourself and deciding what swing phase it shows. "
+                "Use the pose angle data and what you see visually — do not assume even spacing. "
+                "Then write the final coaching report in plain, everyday language anyone can understand — even "
                 "someone who has never played golf. Explain any golf term in brackets immediately. "
+                "Always reference frames by both number and phase (e.g. 'Frame 4 (impact)'). "
                 "Use exactly this structure:\n\n"
+                "## Frame-by-Frame Breakdown\n"
+                "List each frame number and the swing phase you identified for it, plus one sentence on the key thing happening in that frame.\n\n"
                 "## Quick Summary\n"
                 "2-3 sentences on the overall picture, honest and encouraging.\n\n"
                 "## Where the Coaches Agree\n"
