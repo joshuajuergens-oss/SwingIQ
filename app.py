@@ -462,8 +462,8 @@ def analyze():
             saved_paths[key] = path
 
     try:
-        front_frames, front_pose = extract_frames(saved_paths["front"], num_frames=6) if "front" in saved_paths else ([], "")
-        back_frames,  back_pose  = extract_frames(saved_paths["back"],  num_frames=6) if "back"  in saved_paths else ([], "")
+        front_frames, front_pose = extract_frames(saved_paths["front"], num_frames=10) if "front" in saved_paths else ([], "")
+        back_frames,  back_pose  = extract_frames(saved_paths["back"],  num_frames=10) if "back"  in saved_paths else ([], "")
     except Exception as exc:
         traceback.print_exc()
         if using_free:
