@@ -527,7 +527,7 @@ def select_key_frames(ai_client, frames_b64: list[str], view_label: str,
         out = []
         for k, phase in enumerate(KEY_FRAME_PHASES):
             idx = min(n - 1, round(k * (n - 1) / (len(KEY_FRAME_PHASES) - 1)))
-            out.append({"phase": phase, "data": frames_b64[idx]})
+            out.append({"phase": phase, "frame": idx + 1, "data": frames_b64[idx]})
         return out
 
     if n <= len(KEY_FRAME_PHASES):
@@ -617,7 +617,7 @@ def select_key_frames(ai_client, frames_b64: list[str], view_label: str,
         idx = max(0, min(n - 1, int(raw) - 1))
         idx = max(idx, last_idx + 1) if last_idx + 1 < n else idx  # keep increasing when possible
         last_idx = idx
-        selected.append({"phase": phase, "data": frames_b64[idx]})
+        selected.append({"phase": phase, "frame": idx + 1, "data": frames_b64[idx]})
     print(f"  [select] {view_label} key frames: {[int(x) for x in nums]} (top anchored at {top_frame})")
     return selected
 
@@ -965,10 +965,10 @@ def analyze():
     try:
         if front_frames:
             for item in select_key_frames(ai_client, front_frames, "front / face-on", front_angles):
-                frames_payload.append({"view": "Front", "phase": item["phase"], "data": item["data"]})
+                frames_payload.append({"view": "Front", "phase": item["phase"], "frame": item.get("frame"), "data": item["data"]})
         if back_frames:
             for item in select_key_frames(ai_client, back_frames, "back / down-the-line", back_angles):
-                frames_payload.append({"view": "Back", "phase": item["phase"], "data": item["data"]})
+                frames_payload.append({"view": "Back", "phase": item["phase"], "frame": item.get("frame"), "data": item["data"]})
     except Exception as exc:
         print(f"  [select] failed, returning all frames: {exc}")
         for b64 in front_frames:
