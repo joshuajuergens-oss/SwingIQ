@@ -1,2 +1,5 @@
 [phases.setup]
 aptPkgs = ["libxcb1", "libglib2.0-0", "libgl1"]
+
+[phases.install]
+cmds = ["pip install --no-cache-dir -r requirements.txt"]
