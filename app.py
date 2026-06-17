@@ -75,13 +75,21 @@ def free_analyses_remaining(ip: str) -> int:
 
 
 def consume_free_analysis(ip: str) -> bool:
-    """Deduct one free analysis. Returns True if allowed, False if limit reached."""
+    """Reserve one free analysis slot. Returns True if allowed, False if limit reached."""
     today = str(date.today())
     with _usage_lock:
         if _usage[ip][today] >= FREE_LIMIT:
             return False
         _usage[ip][today] += 1
         return True
+
+
+def refund_free_analysis(ip: str) -> None:
+    """Return a previously reserved free analysis slot (called on error)."""
+    today = str(date.today())
+    with _usage_lock:
+        if _usage[ip][today] > 0:
+            _usage[ip][today] -= 1
 
 
 # ---------------------------------------------------------------------------
@@ -457,6 +465,8 @@ def analyze():
         back_frames,  back_pose  = extract_frames(saved_paths["back"],  num_frames=6) if "back"  in saved_paths else ([], "")
     except Exception as exc:
         traceback.print_exc()
+        if using_free:
+            refund_free_analysis(ip)
         return jsonify({"error": f"Frame extraction failed: {str(exc)}"}), 422
     finally:
         for p in saved_paths.values():
@@ -466,6 +476,8 @@ def analyze():
                 pass
 
     if not front_frames and not back_frames:
+        if using_free:
+            refund_free_analysis(ip)
         return jsonify({"error": "Could not extract frames from the video. Check the file format (MP4/MOV recommended)."}), 422
 
     pose_data_block = ""
@@ -664,6 +676,8 @@ def analyze():
 
     except anthropic.APIStatusError as exc:
         traceback.print_exc()
+        if using_free:
+            refund_free_analysis(ip)
         status = exc.status_code
         if status in (502, 503, 504):
             msg = f"Anthropic's servers returned a temporary {status} error. Please wait a moment and try again."
@@ -680,12 +694,18 @@ def analyze():
         return jsonify({"error": msg}), 502
     except anthropic.APITimeoutError:
         traceback.print_exc()
+        if using_free:
+            refund_free_analysis(ip)
         return jsonify({"error": "Request timed out. Try again — the server may be busy."}), 504
     except anthropic.APIConnectionError as exc:
         traceback.print_exc()
+        if using_free:
+            refund_free_analysis(ip)
         return jsonify({"error": f"Connection error: {str(exc)[:200]}"}), 502
 
     if not analysis_text.strip():
+        if using_free:
+            refund_free_analysis(ip)
         return jsonify({"error": "Claude returned an empty response. Please try again."}), 502
 
     # Return annotated frames so the browser can display them
