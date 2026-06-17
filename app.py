@@ -722,13 +722,18 @@ def analyze():
         })
 
         print(f"Running head-coach synthesis [{SYNTHESIS_MODEL}]...")
-        synthesis_response = ai_client.messages.create(
-            model=SYNTHESIS_MODEL,
-            max_tokens=6000,
-            thinking={"type": "adaptive"},
-            messages=[{"role": "user", "content": synthesis_blocks}],
-        )
-        analysis_text = "".join(b.text for b in synthesis_response.content if b.type == "text")
+        analysis_text = ""
+        for attempt in range(3):
+            synthesis_response = ai_client.messages.create(
+                model=SYNTHESIS_MODEL,
+                max_tokens=8000,
+                thinking={"type": "adaptive"},
+                messages=[{"role": "user", "content": synthesis_blocks}],
+            )
+            analysis_text = "".join(b.text for b in synthesis_response.content if hasattr(b, "text"))
+            if analysis_text.strip():
+                break
+            print(f"  [synthesis] attempt {attempt + 1} returned empty — retrying...")
 
     except anthropic.APIStatusError as exc:
         traceback.print_exc()
