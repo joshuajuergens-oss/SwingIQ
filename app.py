@@ -193,7 +193,7 @@ def _pose_angles(landmarks, w, h) -> dict:
     return {k: round(v, 1) for k, v in angles.items()}
 
 
-STAGE_NAMES = ["Setup", "Takeaway", "Backswing", "Top", "Downswing", "Impact/Finish"]
+STAGE_NAMES = SWING_PHASES  # alias kept for build_image_blocks compatibility
 
 
 def detect_swing_start(cap, total: int, sample_every: int = 3) -> int:
@@ -249,10 +249,25 @@ def detect_swing_start(cap, total: int, sample_every: int = 3) -> int:
     return 0
 
 
-def extract_frames(video_path: str, num_frames: int = 6):
+SWING_PHASES = [
+    "ADDRESS (setup)",
+    "TAKEAWAY (start of backswing)",
+    "MID-BACKSWING",
+    "TOP OF BACKSWING",
+    "EARLY DOWNSWING (transition)",
+    "MID-DOWNSWING",
+    "IMPACT",
+    "EARLY FOLLOW-THROUGH",
+    "MID FOLLOW-THROUGH",
+    "FINISH",
+]
+
+
+def extract_frames(video_path: str, num_frames: int = 10):
     """
-    Detect when the swing starts, then extract evenly-spaced frames from that
-    point to the end. Runs MediaPipe pose on each frame.
+    Frame 1 = one frame BEFORE swing start (address position).
+    Frames 2-N = evenly spaced from swing start to end of video.
+    Each frame is labelled with its swing phase and the label is burned in.
 
     Returns:
         frames_b64  : list of base64 JPEG strings (annotated if MediaPipe available)
@@ -266,13 +281,29 @@ def extract_frames(video_path: str, num_frames: int = 6):
 
     # Find swing start via motion detection
     swing_start = detect_swing_start(cap, total)
+
+    # Frame 1: one frame before swing start (address)
+    address_idx = max(0, swing_start - 1)
+
+    # Frames 2-N: evenly spaced from swing_start to end
+    swing_frames = num_frames - 1
     usable_total = total - swing_start
-    if usable_total < num_frames:
-        swing_start = 0  # video too short after detected start, use whole thing
+    if usable_total < swing_frames:
+        swing_start = 0
         usable_total = total
 
-    indices = [swing_start + int(i * (usable_total - 1) / (num_frames - 1))
-               for i in range(num_frames)]
+    swing_indices = [swing_start + int(i * (usable_total - 1) / max(swing_frames - 1, 1))
+                     for i in range(swing_frames)]
+
+    indices = [address_idx] + swing_indices
+
+    # Build phase labels: first frame is always ADDRESS, rest distributed across phases
+    phases = [SWING_PHASES[0]]  # ADDRESS for frame 1
+    remaining_phases = SWING_PHASES[1:]
+    for i in range(swing_frames):
+        phase_idx = int(i * (len(remaining_phases) - 1) / max(swing_frames - 1, 1))
+        phases.append(remaining_phases[phase_idx])
+
     frames_b64 = []
     all_angles = []   # list of dicts, one per frame
 
@@ -292,7 +323,7 @@ def extract_frames(video_path: str, num_frames: int = 6):
         except Exception as e:
             print(f"  [pose] Failed to create landmarker: {e}")
 
-    for frame_num, idx in enumerate(indices):
+    for frame_num, (idx, phase) in enumerate(zip(indices, phases)):
         cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
         ret, frame = cap.read()
         if not ret:
@@ -303,7 +334,14 @@ def extract_frames(video_path: str, num_frames: int = 6):
         if w > 960:
             scale = 960 / w
             frame = cv2.resize(frame, (960, int(h * scale)))
-            h, w = frame.shape[:2]
+        h, w = frame.shape[:2]
+
+        # Burn phase label into frame
+        label = f"FRAME {frame_num + 1}: {phase}"
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        (tw, th), _ = cv2.getTextSize(label, font, 0.65, 2)
+        cv2.rectangle(frame, (0, h - th - 14), (tw + 10, h), (0, 0, 0), -1)
+        cv2.putText(frame, label, (5, h - 8), font, 0.65, (0, 255, 120), 2, cv2.LINE_AA)
 
         frame_angles = {}
         if pose_ctx is not None:
@@ -357,8 +395,7 @@ def extract_frames(video_path: str, num_frames: int = 6):
     pose_summary = ""
     if any(all_angles):
         lines = ["POSE MEASUREMENTS (degrees) — from MediaPipe body-tracking model:"]
-        labels = STAGE_NAMES[:len(all_angles)]
-        for stage, angles in zip(labels, all_angles):
+        for stage, angles in zip(phases, all_angles):
             if not angles:
                 lines.append(f"  {stage}: pose not detected")
                 continue
