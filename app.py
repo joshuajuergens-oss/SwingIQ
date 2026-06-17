@@ -580,7 +580,7 @@ def analyze():
     ]
 
     # Haiku for agents (fast, cheap), Opus for final synthesis (best quality)
-    AGENT_MODEL     = "claude-haiku-4-5"
+    AGENT_MODEL     = "claude-opus-4-8"
     SYNTHESIS_MODEL = "claude-opus-4-8"
 
     def run_agent(agent: dict) -> str:
@@ -598,7 +598,7 @@ def analyze():
                 "Be honest and thorough — another coach will cross-check your findings."
             ),
         })
-        # Haiku doesn't support adaptive thinking — plain call
+        # Plain call — adaptive thinking handled by synthesis step
         response = ai_client.messages.create(
             model=AGENT_MODEL,
             max_tokens=2000,
