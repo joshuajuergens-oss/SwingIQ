@@ -349,6 +349,47 @@
       display: none;
     }
 
+    /* ── SWING WINDOW SELECTOR ── */
+    .swing-handle {
+      position: absolute;
+      top: 0;
+      width: 18px;
+      height: 36px;
+      background: var(--green);
+      border: 2px solid white;
+      border-radius: 4px;
+      cursor: ew-resize;
+      transform: translateX(-50%);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      z-index: 10;
+    }
+    .swing-handle:hover { background: var(--green-light); }
+    .handle-label {
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.6rem;
+      font-weight: 700;
+      color: var(--green);
+      white-space: nowrap;
+      letter-spacing: 0.05em;
+    }
+    .window-btn {
+      padding: 0.45rem 1rem;
+      border: 2px solid var(--gray-200);
+      border-radius: 8px;
+      background: white;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      color: var(--gray-700);
+      transition: all 0.15s;
+    }
+    .window-btn:hover { border-color: var(--green); color: var(--green); }
+    .window-btn.green { background: var(--green); color: white; border-color: var(--green); }
+    .window-btn.green:hover { background: var(--green-light); }
+
     /* ── ANALYZE BUTTON ── */
     .analyze-btn {
       display: block;
@@ -1022,6 +1063,45 @@
         </div>
       </div>
       <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:1rem;">Upload one or both angles. More angles = more accurate analysis.</p>
+
+      <!-- Swing Window Selector -->
+      <div id="swingSelector" style="display:none;margin-bottom:1.5rem;">
+        <div style="font-weight:600;font-size:0.95rem;margin-bottom:0.5rem;color:var(--gray-900);">
+          Mark Your Swing Window
+        </div>
+        <p style="font-size:0.8rem;color:var(--gray-600);margin-bottom:0.75rem;">
+          Scrub the video to find your swing. Set the <strong>Start</strong> just before you begin your takeaway, and the <strong>End</strong> at your finish. Claude will only analyze frames inside this window.
+        </p>
+        <video id="selectorVideo" style="width:100%;max-height:260px;border-radius:8px;background:#000;margin-bottom:0.75rem;" muted playsinline></video>
+
+        <!-- Timeline bar -->
+        <div style="position:relative;height:36px;margin-bottom:0.75rem;" id="timelineWrap">
+          <div style="position:absolute;top:14px;left:0;right:0;height:8px;background:var(--gray-200);border-radius:4px;" id="timelineTrack"></div>
+          <div style="position:absolute;top:14px;height:8px;background:var(--green);border-radius:4px;" id="timelineSelected"></div>
+          <!-- Playhead -->
+          <div style="position:absolute;top:8px;width:3px;height:20px;background:white;border:2px solid var(--gray-600);border-radius:2px;transform:translateX(-50%);cursor:pointer;" id="playhead"></div>
+          <!-- Start handle -->
+          <div class="swing-handle" id="startHandle" style="left:0%;" title="Drag to set swing start">
+            <div class="handle-label">START</div>
+          </div>
+          <!-- End handle -->
+          <div class="swing-handle" id="endHandle" style="left:100%;" title="Drag to set swing end">
+            <div class="handle-label">END</div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+          <button type="button" id="setStartBtn" class="window-btn green">▶ Set Start Here</button>
+          <button type="button" id="setEndBtn" class="window-btn">⏹ Set End Here</button>
+          <span style="font-size:0.8rem;color:var(--gray-600);">
+            Window: <strong id="windowDisplay">full video</strong>
+          </span>
+        </div>
+
+        <input type="hidden" id="swingStartSec" name="swing_start_sec" value="" />
+        <input type="hidden" id="swingEndSec" name="swing_end_sec" value="" />
+      </div>
+
       <button type="submit" class="analyze-btn" id="analyzeBtn" disabled>
         Analyze My Swing →
       </button>
@@ -1179,6 +1259,118 @@
   setupVideoInput(frontInput, frontCard, frontName, frontPreview);
   setupVideoInput(backInput, backCard, backName, backPreview);
 
+  // ── Swing Window Selector ──────────────────────────────────────────────
+  const swingSelector  = document.getElementById('swingSelector');
+  const selectorVideo  = document.getElementById('selectorVideo');
+  const startHandle    = document.getElementById('startHandle');
+  const endHandle      = document.getElementById('endHandle');
+  const timelineWrap   = document.getElementById('timelineWrap');
+  const timelineSelected = document.getElementById('timelineSelected');
+  const playhead       = document.getElementById('playhead');
+  const windowDisplay  = document.getElementById('windowDisplay');
+  const swingStartSec  = document.getElementById('swingStartSec');
+  const swingEndSec    = document.getElementById('swingEndSec');
+  const setStartBtn    = document.getElementById('setStartBtn');
+  const setEndBtn      = document.getElementById('setEndBtn');
+
+  let startPct = 0, endPct = 1;
+
+  function fmtTime(sec) {
+    const m = Math.floor(sec / 60), s = (sec % 60).toFixed(2);
+    return m > 0 ? `${m}:${s.padStart(5,'0')}` : `${s}s`;
+  }
+
+  function updateSelectionUI() {
+    const dur = selectorVideo.duration || 1;
+    startHandle.style.left = (startPct * 100) + '%';
+    endHandle.style.left   = (endPct   * 100) + '%';
+    timelineSelected.style.left  = (startPct * 100) + '%';
+    timelineSelected.style.width = ((endPct - startPct) * 100) + '%';
+    const startSec = startPct * dur, endSec = endPct * dur;
+    swingStartSec.value = startSec.toFixed(3);
+    swingEndSec.value   = endSec.toFixed(3);
+    windowDisplay.textContent = `${fmtTime(startSec)} → ${fmtTime(endSec)} (${fmtTime(endSec - startSec)} window)`;
+  }
+
+  function pctFromEvent(e) {
+    const rect = timelineWrap.getBoundingClientRect();
+    return Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  }
+
+  function makeDraggable(handle, isStart) {
+    handle.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const onMove = mv => {
+        const p = pctFromEvent(mv);
+        if (isStart) { startPct = Math.min(p, endPct - 0.01); }
+        else          { endPct   = Math.max(p, startPct + 0.01); }
+        updateSelectionUI();
+        selectorVideo.currentTime = (isStart ? startPct : endPct) * (selectorVideo.duration || 1);
+      };
+      const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+    // Touch support
+    handle.addEventListener('touchstart', e => {
+      e.preventDefault();
+      const onMove = mv => {
+        const touch = mv.touches[0];
+        const rect = timelineWrap.getBoundingClientRect();
+        const p = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
+        if (isStart) { startPct = Math.min(p, endPct - 0.01); }
+        else          { endPct   = Math.max(p, startPct + 0.01); }
+        updateSelectionUI();
+        selectorVideo.currentTime = (isStart ? startPct : endPct) * (selectorVideo.duration || 1);
+      };
+      const onUp = () => { document.removeEventListener('touchmove', onMove); document.removeEventListener('touchend', onUp); };
+      document.addEventListener('touchmove', onMove, { passive: false });
+      document.addEventListener('touchend', onUp);
+    }, { passive: false });
+  }
+
+  makeDraggable(startHandle, true);
+  makeDraggable(endHandle,   false);
+
+  // Click on timeline to seek
+  timelineWrap.addEventListener('click', e => {
+    if (e.target === startHandle || e.target === endHandle) return;
+    const p = pctFromEvent(e);
+    selectorVideo.currentTime = p * (selectorVideo.duration || 1);
+  });
+
+  // Update playhead as video plays
+  selectorVideo.addEventListener('timeupdate', () => {
+    const p = selectorVideo.currentTime / (selectorVideo.duration || 1);
+    playhead.style.left = (p * 100) + '%';
+  });
+
+  // Set start/end from current playback position
+  setStartBtn.addEventListener('click', () => {
+    const p = selectorVideo.currentTime / (selectorVideo.duration || 1);
+    startPct = Math.min(p, endPct - 0.01);
+    updateSelectionUI();
+  });
+  setEndBtn.addEventListener('click', () => {
+    const p = selectorVideo.currentTime / (selectorVideo.duration || 1);
+    endPct = Math.max(p, startPct + 0.01);
+    updateSelectionUI();
+  });
+
+  // Show selector when any video is loaded
+  function showSelectorForVideo(file) {
+    swingSelector.style.display = 'block';
+    selectorVideo.src = URL.createObjectURL(file);
+    selectorVideo.load();
+    selectorVideo.addEventListener('loadedmetadata', () => {
+      startPct = 0; endPct = 1;
+      updateSelectionUI();
+    }, { once: true });
+  }
+
+  frontInput.addEventListener('change', () => { if (frontInput.files[0]) showSelectorForVideo(frontInput.files[0]); });
+  backInput.addEventListener('change',  () => { if (backInput.files[0])  showSelectorForVideo(backInput.files[0]); });
+
   function updateBtn() {
     const hasVideo = frontInput.files.length || backInput.files.length;
     const hasAccess = freeRemaining > 0 || apiKeyInput.value.trim().startsWith('sk-ant-');
@@ -1218,6 +1410,8 @@
     if (frontInput.files[0]) fd.append('front_video', frontInput.files[0]);
     if (backInput.files[0])  fd.append('back_video',  backInput.files[0]);
     if (club) fd.append('club', club);
+    if (swingStartSec.value) fd.append('swing_start_sec', swingStartSec.value);
+    if (swingEndSec.value)   fd.append('swing_end_sec',   swingEndSec.value);
     const userKey = apiKeyInput.value.trim();
     if (userKey) fd.append('api_key', userKey);
 

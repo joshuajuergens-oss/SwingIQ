@@ -264,36 +264,41 @@ SWING_PHASES = [
 STAGE_NAMES = SWING_PHASES  # alias for build_image_blocks
 
 
-def extract_frames(video_path: str, num_frames: int = 10):
+def extract_frames(video_path: str, num_frames: int = 10,
+                   user_start_sec: float = None, user_end_sec: float = None):
     """
-    Frame 1 = one frame BEFORE swing start (address position).
-    Frames 2-N = evenly spaced from swing start to end of video.
-    Frames are numbered only — Claude identifies the swing phase from the image.
-
-    Returns:
-        frames_b64  : list of base64 JPEG strings (annotated if MediaPipe available)
-        pose_summary: human-readable string of per-frame angle data (empty if unavailable)
+    If user_start_sec/user_end_sec are provided, use that window directly.
+    Otherwise fall back to automatic motion-detection swing start.
+    Frame 1 = one frame before the swing window starts (address).
+    Frames 2-N = evenly spaced across the swing window.
     """
     cap = cv2.VideoCapture(video_path)
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps   = cap.get(cv2.CAP_PROP_FPS) or 30
     if total <= 0:
         cap.release()
         return [], ""
 
-    # Find swing start via motion detection
-    swing_start = detect_swing_start(cap, total)
+    if user_start_sec is not None and user_end_sec is not None:
+        swing_start = max(0, int(user_start_sec * fps))
+        swing_end   = min(total - 1, int(user_end_sec * fps))
+        print(f"  [window] user-defined: frames {swing_start}–{swing_end} ({user_start_sec:.2f}s–{user_end_sec:.2f}s)")
+    else:
+        swing_start = detect_swing_start(cap, total)
+        swing_end   = total - 1
+        print(f"  [window] auto-detected: swing starts at frame {swing_start}")
 
-    # Frame 1: one frame before swing start (address)
+    # Frame 1: one frame before swing window (address position)
     address_idx = max(0, swing_start - 1)
 
-    # Frames 2-N: evenly spaced from swing_start to end
+    # Frames 2-N: evenly spaced across the swing window
     swing_frames = num_frames - 1
-    usable_total = total - swing_start
-    if usable_total < swing_frames:
+    usable = swing_end - swing_start
+    if usable < swing_frames:
         swing_start = 0
-        usable_total = total
+        usable = swing_end
 
-    swing_indices = [swing_start + int(i * (usable_total - 1) / max(swing_frames - 1, 1))
+    swing_indices = [swing_start + int(i * usable / max(swing_frames - 1, 1))
                      for i in range(swing_frames)]
 
     indices = [address_idx] + swing_indices
@@ -483,6 +488,15 @@ def analyze():
 
     club = request.form.get("club", "").strip()
 
+    # User-defined swing window (seconds)
+    try:
+        user_start = float(request.form.get("swing_start_sec", "").strip())
+        user_end   = float(request.form.get("swing_end_sec",   "").strip())
+        if user_end <= user_start:
+            user_start = user_end = None
+    except (ValueError, TypeError):
+        user_start = user_end = None
+
     uid = uuid.uuid4().hex
     saved_paths = {}
 
@@ -494,8 +508,8 @@ def analyze():
             saved_paths[key] = path
 
     try:
-        front_frames, front_pose = extract_frames(saved_paths["front"], num_frames=10) if "front" in saved_paths else ([], "")
-        back_frames,  back_pose  = extract_frames(saved_paths["back"],  num_frames=10) if "back"  in saved_paths else ([], "")
+        front_frames, front_pose = extract_frames(saved_paths["front"], num_frames=10, user_start_sec=user_start, user_end_sec=user_end) if "front" in saved_paths else ([], "")
+        back_frames,  back_pose  = extract_frames(saved_paths["back"],  num_frames=10, user_start_sec=user_start, user_end_sec=user_end) if "back"  in saved_paths else ([], "")
     except Exception as exc:
         traceback.print_exc()
         if using_free:
