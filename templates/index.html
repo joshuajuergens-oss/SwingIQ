@@ -1,0 +1,1337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwingIQ — AI Golf Coach</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green:       #3a7d44;
+      --green-light: #4e9e5a;
+      --green-dim:   #2d6235;
+      --green-bg:    #edf7ef;
+      --black:       #0d0d0d;
+      --gray-900:    #111827;
+      --gray-800:    #1f2937;
+      --gray-600:    #4b5563;
+      --gray-400:    #9ca3af;
+      --gray-200:    #e5e7eb;
+      --gray-100:    #f3f4f6;
+      --white:       #ffffff;
+      --shadow-sm:   0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.05);
+      --shadow-md:   0 4px 16px rgba(0,0,0,.10), 0 2px 6px rgba(0,0,0,.06);
+      --shadow-lg:   0 10px 40px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.08);
+      --radius:      12px;
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--gray-100);
+      color: var(--gray-900);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    /* ── NAV ── */
+    nav {
+      background: var(--black);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      border-bottom: 1px solid #222;
+    }
+
+    .nav-inner {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 1.5rem;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      text-decoration: none;
+    }
+
+    .logo-mark {
+      width: 32px;
+      height: 32px;
+      background: var(--green);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1rem;
+    }
+
+    .logo-text {
+      font-size: 1.15rem;
+      font-weight: 800;
+      color: var(--white);
+      letter-spacing: -0.03em;
+    }
+
+    .logo-text span { color: var(--green-light); }
+
+    .nav-badge {
+      background: var(--green);
+      color: var(--white);
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      padding: 0.2rem 0.55rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 1.5rem;
+    }
+
+    .nav-link {
+      color: var(--gray-400);
+      font-size: 0.85rem;
+      font-weight: 500;
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+
+    .nav-link:hover { color: var(--white); }
+
+    /* ── HERO ── */
+    .hero {
+      background: linear-gradient(160deg, var(--black) 0%, var(--gray-900) 55%, #0f2015 100%);
+      padding: 4rem 1.5rem 5rem;
+      text-align: center;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: rgba(58,125,68,.18);
+      border: 1px solid rgba(58,125,68,.35);
+      color: #7ec87e;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.3rem 0.9rem;
+      border-radius: 20px;
+      margin-bottom: 1.4rem;
+    }
+
+    .hero h1 {
+      font-size: clamp(2rem, 5vw, 3.2rem);
+      font-weight: 800;
+      color: var(--white);
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      max-width: 700px;
+      margin: 0 auto 1rem;
+    }
+
+    .hero h1 span { color: var(--green-light); }
+
+    .hero-sub {
+      color: var(--gray-400);
+      font-size: 1.05rem;
+      max-width: 520px;
+      margin: 0 auto 2.5rem;
+    }
+
+    .hero-stats {
+      display: flex;
+      justify-content: center;
+      gap: 2.5rem;
+      flex-wrap: wrap;
+    }
+
+    .stat {
+      text-align: center;
+    }
+
+    .stat-num {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--white);
+    }
+
+    .stat-label {
+      font-size: 0.75rem;
+      color: var(--gray-400);
+      margin-top: 0.15rem;
+    }
+
+    /* ── MAIN LAYOUT ── */
+    .page-wrap {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem 4rem;
+    }
+
+    /* ── SECTION LABELS ── */
+    .section-label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--green);
+      margin-bottom: 0.6rem;
+    }
+
+    /* ── CARD ── */
+    .card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 1.8rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .card-title-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--green-bg);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.85rem;
+    }
+
+    /* ── CLUB SELECTOR ── */
+    .club-section label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--gray-600);
+      margin-bottom: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .club-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+
+    .club-btn {
+      background: var(--white);
+      border: 1.5px solid var(--gray-200);
+      border-radius: 8px;
+      color: var(--gray-600);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.4rem 0.85rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+
+    .club-btn:hover {
+      border-color: var(--green);
+      color: var(--green);
+      background: var(--green-bg);
+    }
+
+    .club-btn.selected {
+      background: var(--green);
+      border-color: var(--green);
+      color: var(--white);
+    }
+
+    .club-divider { width: 100%; height: 0; border: none; margin: 0.2rem 0; }
+
+    /* ── UPLOAD GRID ── */
+    .upload-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.2rem;
+    }
+
+    @media (max-width: 580px) { .upload-grid { grid-template-columns: 1fr; } }
+
+    .upload-card {
+      border: 2px dashed var(--gray-200);
+      border-radius: var(--radius);
+      padding: 2rem 1.2rem;
+      text-align: center;
+      position: relative;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      background: var(--gray-100);
+    }
+
+    .upload-card:hover, .upload-card.dragover {
+      border-color: var(--green);
+      background: var(--green-bg);
+    }
+
+    .upload-card.has-file {
+      border-color: var(--green);
+      border-style: solid;
+      background: var(--green-bg);
+    }
+
+    .upload-card input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .upload-icon { font-size: 2rem; margin-bottom: 0.6rem; }
+
+    .upload-label {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 0.3rem;
+    }
+
+    .upload-badge {
+      display: inline-block;
+      background: var(--gray-200);
+      color: var(--gray-600);
+      font-size: 0.65rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.15rem 0.5rem;
+      border-radius: 20px;
+      margin-bottom: 0.4rem;
+    }
+
+    .upload-hint {
+      font-size: 0.75rem;
+      color: var(--gray-400);
+    }
+
+    .file-name {
+      margin-top: 0.6rem;
+      font-size: 0.78rem;
+      color: var(--green);
+      font-weight: 600;
+      word-break: break-all;
+    }
+
+    .video-preview {
+      margin-top: 0.75rem;
+      width: 100%;
+      border-radius: 8px;
+      max-height: 160px;
+      object-fit: cover;
+      display: none;
+    }
+
+    /* ── ANALYZE BUTTON ── */
+    .analyze-btn {
+      display: block;
+      width: 100%;
+      padding: 1rem;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--white);
+      background: var(--green);
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      letter-spacing: 0.02em;
+      transition: background 0.15s, transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+    }
+
+    .analyze-btn:hover:not(:disabled) {
+      background: var(--green-light);
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(58,125,68,.35);
+    }
+
+    .analyze-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── HOW IT WORKS ── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 600px) { .steps { grid-template-columns: 1fr; } }
+
+    .step {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 1.2rem;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      background: var(--green);
+      color: var(--white);
+      border-radius: 50%;
+      font-size: 0.78rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 0.7rem;
+    }
+
+    .step-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 0.3rem;
+    }
+
+    .step-desc {
+      font-size: 0.78rem;
+      color: var(--gray-400);
+      line-height: 1.5;
+    }
+
+    /* ── LOADING ── */
+    .loading {
+      display: none;
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-md);
+      padding: 3.5rem 2rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .loading-agents {
+      display: flex;
+      justify-content: center;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+
+    .agent-pill {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 30px;
+      padding: 0.4rem 1rem;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--gray-600);
+    }
+
+    .agent-pill.active {
+      background: var(--green-bg);
+      border-color: var(--green);
+      color: var(--green-dim);
+    }
+
+    .agent-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--gray-400);
+    }
+
+    .agent-pill.active .agent-dot {
+      background: var(--green);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(0.85); }
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 3px solid var(--gray-200);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 1.2rem;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loading-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 0.4rem;
+    }
+
+    .loading-sub {
+      font-size: 0.82rem;
+      color: var(--gray-400);
+    }
+
+    /* ── RESULTS ── */
+    #results { display: none; }
+
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .results-title {
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--gray-900);
+      letter-spacing: -0.02em;
+    }
+
+    .results-meta {
+      font-size: 0.78rem;
+      color: var(--gray-400);
+      font-weight: 500;
+    }
+
+    /* ── FRAME VIEWER ── */
+    .frames-section {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .frames-section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .frames-section-title .badge {
+      background: var(--green-bg);
+      color: var(--green-dim);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 0.15rem 0.5rem;
+      border-radius: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .frames-tabs {
+      display: flex;
+      gap: 0.4rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .frame-tab {
+      background: var(--gray-100);
+      border: 1.5px solid var(--gray-200);
+      border-radius: 6px;
+      color: var(--gray-600);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.3rem 0.75rem;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .frame-tab:hover { border-color: var(--green); color: var(--green); }
+    .frame-tab.active { background: var(--green); border-color: var(--green); color: var(--white); }
+
+    .frames-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .frame-card {
+      background: var(--gray-100);
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .frame-card img { width: 100%; display: block; }
+
+    .frame-card-label {
+      font-size: 0.7rem;
+      font-weight: 700;
+      color: var(--green-dim);
+      padding: 0.4rem 0.65rem;
+      background: var(--green-bg);
+      text-align: center;
+      letter-spacing: 0.04em;
+    }
+
+    /* ── ANALYSIS CONTENT ── */
+    .analysis-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+      line-height: 1.75;
+      font-size: 0.93rem;
+      color: var(--gray-800);
+    }
+
+    .analysis-card h2 {
+      font-size: 1.05rem;
+      font-weight: 800;
+      color: var(--gray-900);
+      margin: 2rem 0 0.8rem;
+      padding: 0.65rem 1rem;
+      background: var(--gray-100);
+      border-left: 4px solid var(--green);
+      border-radius: 0 8px 8px 0;
+      letter-spacing: -0.01em;
+    }
+
+    .analysis-card h2:first-child { margin-top: 0; }
+
+    .analysis-card h3 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--gray-900);
+      margin: 1.3rem 0 0.4rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .analysis-card h3::before {
+      content: '';
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      background: var(--green);
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .analysis-card p { margin-bottom: 0.75rem; color: var(--gray-800); }
+
+    .analysis-card ul {
+      list-style: none;
+      padding-left: 0;
+      margin-bottom: 0.75rem;
+    }
+
+    .analysis-card ul li {
+      padding: 0.55rem 0.9rem;
+      margin-bottom: 0.4rem;
+      background: var(--gray-100);
+      border-radius: 7px;
+      border-left: 3px solid var(--green);
+      color: var(--gray-800);
+      font-size: 0.88rem;
+    }
+
+    .analysis-card ol {
+      padding-left: 1.4rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .analysis-card ol li { margin-bottom: 0.4rem; color: var(--gray-800); }
+
+    .analysis-card strong { color: var(--gray-900); font-weight: 700; }
+
+    /* ── SPECIALIST REPORTS ── */
+    .specialist-section {
+      margin-bottom: 1.5rem;
+    }
+
+    .specialist-section-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gray-400);
+      margin-bottom: 0.75rem;
+    }
+
+    details.specialist {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      margin-bottom: 0.6rem;
+      overflow: hidden;
+      box-shadow: var(--shadow-sm);
+    }
+
+    details.specialist summary {
+      cursor: pointer;
+      padding: 1rem 1.4rem;
+      font-weight: 700;
+      font-size: 0.88rem;
+      color: var(--gray-900);
+      list-style: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      user-select: none;
+    }
+
+    details.specialist summary::after {
+      content: '›';
+      font-size: 1.2rem;
+      color: var(--gray-400);
+      transition: transform 0.2s;
+    }
+
+    details.specialist[open] summary::after { transform: rotate(90deg); }
+
+    details.specialist summary::-webkit-details-marker { display: none; }
+
+    details.specialist .specialist-body {
+      border-top: 1px solid var(--gray-200);
+      padding: 1.5rem;
+      font-size: 0.88rem;
+      color: var(--gray-800);
+      line-height: 1.7;
+    }
+
+    /* ── API KEY SECTION ── */
+    .access-card {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow-sm);
+      padding: 1.8rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .free-banner {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--green-bg);
+      border: 1px solid #b6d9be;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      color: var(--green-dim);
+      font-weight: 500;
+    }
+
+    .free-banner .badge-free {
+      background: var(--green);
+      color: var(--white);
+      font-size: 0.65rem;
+      font-weight: 800;
+      padding: 0.2rem 0.55rem;
+      border-radius: 20px;
+      white-space: nowrap;
+      letter-spacing: 0.05em;
+    }
+
+    .used-banner {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+      font-size: 0.85rem;
+      color: #92400e;
+      font-weight: 500;
+    }
+
+    .api-key-wrap { margin-top: 0.25rem; }
+
+    .api-key-wrap label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--gray-600);
+      margin-bottom: 0.4rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+
+    .api-key-row {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .api-key-input {
+      flex: 1;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 8px;
+      padding: 0.55rem 0.85rem;
+      font-size: 0.85rem;
+      font-family: monospace;
+      color: var(--gray-900);
+      background: var(--gray-100);
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    .api-key-input:focus { border-color: var(--green); background: var(--white); }
+    .api-key-input.valid { border-color: var(--green); }
+    .api-key-input.invalid { border-color: #ef4444; }
+
+    .api-key-hint {
+      font-size: 0.72rem;
+      color: var(--gray-400);
+      margin-top: 0.4rem;
+    }
+
+    .api-key-hint a { color: var(--green); }
+
+    /* ── ERROR ── */
+    .error-box {
+      display: none;
+      background: #fff5f5;
+      border: 1px solid #fecaca;
+      border-radius: var(--radius);
+      padding: 1rem 1.4rem;
+      color: #b91c1c;
+      margin-bottom: 1.5rem;
+      font-size: 0.88rem;
+      font-weight: 500;
+    }
+
+    .upgrade-box {
+      display: none;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: var(--radius);
+      padding: 1.2rem 1.4rem;
+      color: #92400e;
+      margin-bottom: 1.5rem;
+      font-size: 0.88rem;
+    }
+
+    .upgrade-box strong { color: #78350f; display: block; margin-bottom: 0.3rem; }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--black);
+      border-top: 1px solid #1a1a1a;
+      padding: 2rem 1.5rem;
+      text-align: center;
+    }
+
+    .footer-logo {
+      font-size: 1rem;
+      font-weight: 800;
+      color: var(--white);
+      letter-spacing: -0.02em;
+      margin-bottom: 0.4rem;
+    }
+
+    .footer-logo span { color: var(--green-light); }
+
+    .footer-sub {
+      font-size: 0.75rem;
+      color: var(--gray-600);
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a class="nav-logo" href="#">
+      <div class="logo-mark">⛳</div>
+      <span class="logo-text">Swing<span>IQ</span></span>
+      <span class="nav-badge">Pro</span>
+    </a>
+    <div class="nav-right">
+      <a class="nav-link" href="#">Dashboard</a>
+      <a class="nav-link" href="#">History</a>
+      <a class="nav-link" href="#">Settings</a>
+    </div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-eyebrow">⚡ Powered by Claude AI + MediaPipe Pose</div>
+  <h1>Your personal <span>AI golf coach</span>, available 24/7</h1>
+  <p class="hero-sub">Upload a slow-motion video of your swing and get a full biomechanical breakdown from three specialist AI coaches in minutes.</p>
+  <div class="hero-stats">
+    <div class="stat">
+      <div class="stat-num">3</div>
+      <div class="stat-label">Specialist Coaches</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">6</div>
+      <div class="stat-label">Swing Stages Analyzed</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">8</div>
+      <div class="stat-label">Joint Angles Measured</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">100%</div>
+      <div class="stat-label">AI-Powered</div>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="page-wrap">
+
+  <!-- HOW IT WORKS -->
+  <p class="section-label">How it works</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-title">Upload your video</div>
+      <div class="step-desc">Record a slow-motion swing from the front, back, or both angles.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-title">AI coaches review it</div>
+      <div class="step-desc">Three specialist AIs analyze your body, club, and tempo — all at once.</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-title">Get your full report</div>
+      <div class="step-desc">Receive every issue found, ranked by severity, with drills to fix each one.</div>
+    </div>
+  </div>
+
+  <!-- ACCESS / API KEY -->
+  <div class="access-card" id="accessCard">
+    <div class="card-title">
+      <div class="card-title-icon">🔑</div>
+      Access
+    </div>
+    <div id="freeBanner" class="free-banner" style="display:none">
+      <span class="badge-free">FREE</span>
+      <span id="freeBannerText">You have 1 free analysis today — no API key needed.</span>
+    </div>
+    <div id="usedBanner" class="used-banner" style="display:none">
+      ⚠️ <span>You've used your free analysis for today. Enter your Anthropic API key below to continue — it's free to sign up.</span>
+    </div>
+    <div class="api-key-wrap">
+      <label>Your Anthropic API Key <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional while you have free analyses)</span></label>
+      <div class="api-key-row">
+        <input type="password" class="api-key-input" id="apiKeyInput" placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false" />
+      </div>
+      <p class="api-key-hint">Get a free key at <a href="https://console.anthropic.com/settings/api-keys" target="_blank">console.anthropic.com</a> · Your key is never stored on our servers · Saved locally in your browser</p>
+    </div>
+  </div>
+
+  <!-- FORM -->
+  <form id="swingForm">
+
+    <!-- Club -->
+    <div class="card">
+      <div class="card-title">
+        <div class="card-title-icon">🏌️</div>
+        Select Your Club
+      </div>
+      <div class="club-section">
+        <label>Club Being Used — optional but improves accuracy</label>
+        <div class="club-grid" id="clubGrid">
+          <button type="button" class="club-btn" data-club="Driver">Driver</button>
+          <button type="button" class="club-btn" data-club="3-Wood">3-Wood</button>
+          <button type="button" class="club-btn" data-club="5-Wood">5-Wood</button>
+          <button type="button" class="club-btn" data-club="Hybrid">Hybrid</button>
+          <div class="club-divider"></div>
+          <button type="button" class="club-btn" data-club="3-Iron">3-Iron</button>
+          <button type="button" class="club-btn" data-club="4-Iron">4-Iron</button>
+          <button type="button" class="club-btn" data-club="5-Iron">5-Iron</button>
+          <button type="button" class="club-btn" data-club="6-Iron">6-Iron</button>
+          <button type="button" class="club-btn" data-club="7-Iron">7-Iron</button>
+          <button type="button" class="club-btn" data-club="8-Iron">8-Iron</button>
+          <button type="button" class="club-btn" data-club="9-Iron">9-Iron</button>
+          <div class="club-divider"></div>
+          <button type="button" class="club-btn" data-club="Pitching Wedge">PW</button>
+          <button type="button" class="club-btn" data-club="Gap Wedge">GW</button>
+          <button type="button" class="club-btn" data-club="Sand Wedge">SW</button>
+          <button type="button" class="club-btn" data-club="Lob Wedge">LW</button>
+          <div class="club-divider"></div>
+          <button type="button" class="club-btn" data-club="Putter">Putter</button>
+        </div>
+        <input type="hidden" id="selectedClub" name="club" value="" />
+      </div>
+    </div>
+
+    <!-- Upload -->
+    <div class="card">
+      <div class="card-title">
+        <div class="card-title-icon">🎬</div>
+        Upload Swing Video
+      </div>
+      <div class="upload-grid">
+        <div class="upload-card" id="frontCard">
+          <input type="file" id="front_video" name="front_video" accept="video/*" />
+          <div class="upload-icon">📹</div>
+          <div class="upload-badge">Front View</div>
+          <div class="upload-label">Face-On Angle</div>
+          <div class="upload-hint">MP4, MOV, AVI · Slow-mo preferred</div>
+          <div class="file-name" id="frontName"></div>
+          <video class="video-preview" id="frontPreview" muted playsinline loop></video>
+        </div>
+        <div class="upload-card" id="backCard">
+          <input type="file" id="back_video" name="back_video" accept="video/*" />
+          <div class="upload-icon">🎥</div>
+          <div class="upload-badge">Back View</div>
+          <div class="upload-label">Down-the-Line Angle</div>
+          <div class="upload-hint">MP4, MOV, AVI · Slow-mo preferred</div>
+          <div class="file-name" id="backName"></div>
+          <video class="video-preview" id="backPreview" muted playsinline loop></video>
+        </div>
+      </div>
+      <p style="font-size:0.75rem;color:var(--gray-400);margin-bottom:1rem;">Upload one or both angles. More angles = more accurate analysis.</p>
+      <button type="submit" class="analyze-btn" id="analyzeBtn" disabled>
+        Analyze My Swing →
+      </button>
+    </div>
+
+  </form>
+
+  <!-- LOADING -->
+  <div class="loading" id="loading">
+    <div class="loading-agents">
+      <div class="agent-pill active"><div class="agent-dot"></div>Body &amp; Posture Coach</div>
+      <div class="agent-pill active"><div class="agent-dot"></div>Club &amp; Hands Coach</div>
+      <div class="agent-pill active"><div class="agent-dot"></div>Tempo &amp; Rhythm Coach</div>
+    </div>
+    <div class="spinner"></div>
+    <div class="loading-title" id="loadingTitle">Analyzing your swing…</div>
+    <div class="loading-sub">Three specialist AIs are reviewing your swing in parallel,<br>then a head coach compares their findings. This takes 1–3 minutes.</div>
+  </div>
+
+  <!-- ERROR -->
+  <div class="error-box" id="errorBox"></div>
+
+  <!-- FREE LIMIT REACHED -->
+  <div class="upgrade-box" id="upgradeBox">
+    <strong>You've used your 1 free analysis for today</strong>
+    Your free analysis resets at midnight. To keep going now, enter your Anthropic API key above — it takes 2 minutes to sign up and you only pay for what you use (roughly $0.50–$1.50 per analysis).
+    <br><br>
+    <a href="https://console.anthropic.com/settings/api-keys" target="_blank" style="color:var(--green);font-weight:700;">Get a free API key →</a>
+  </div>
+
+  <!-- RESULTS -->
+  <div id="results">
+    <div class="results-header">
+      <div class="results-title" id="resultsTitle">Swing Analysis Report</div>
+      <div class="results-meta" id="resultsMeta"></div>
+    </div>
+
+    <!-- Frame viewer -->
+    <div class="frames-section" id="framesSection" style="display:none">
+      <div class="frames-section-title">
+        🦴 Pose Skeleton Frames <span class="badge">MediaPipe</span>
+      </div>
+      <div class="frames-tabs" id="framesTabs"></div>
+      <div class="frames-grid" id="framesGrid"></div>
+    </div>
+
+    <!-- Main analysis -->
+    <div class="analysis-card" id="analysisContent"></div>
+
+    <!-- Specialist reports -->
+    <div class="specialist-section" id="agentReports"></div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Swing<span>IQ</span></div>
+  <div class="footer-sub">AI-powered golf coaching · Powered by Claude &amp; MediaPipe</div>
+</footer>
+
+<script>
+  const frontInput      = document.getElementById('front_video');
+  const backInput       = document.getElementById('back_video');
+  const frontCard       = document.getElementById('frontCard');
+  const backCard        = document.getElementById('backCard');
+  const frontName       = document.getElementById('frontName');
+  const backName        = document.getElementById('backName');
+  const frontPreview    = document.getElementById('frontPreview');
+  const backPreview     = document.getElementById('backPreview');
+  const analyzeBtn      = document.getElementById('analyzeBtn');
+  const form            = document.getElementById('swingForm');
+  const loading         = document.getElementById('loading');
+  const results         = document.getElementById('results');
+  const analysisContent = document.getElementById('analysisContent');
+  const errorBox        = document.getElementById('errorBox');
+  const upgradeBox      = document.getElementById('upgradeBox');
+  const selectedClubInput = document.getElementById('selectedClub');
+  const apiKeyInput     = document.getElementById('apiKeyInput');
+  const freeBanner      = document.getElementById('freeBanner');
+  const usedBanner      = document.getElementById('usedBanner');
+
+  // ── Restore saved API key ──────────────────────────────────────────────
+  const savedKey = localStorage.getItem('swingiq_api_key') || '';
+  if (savedKey) apiKeyInput.value = savedKey;
+
+  apiKeyInput.addEventListener('input', () => {
+    const val = apiKeyInput.value.trim();
+    if (val) localStorage.setItem('swingiq_api_key', val);
+    else localStorage.removeItem('swingiq_api_key');
+    updateBtn();
+  });
+
+  // ── Check free usage on load ───────────────────────────────────────────
+  let freeRemaining = 1; // optimistic default while fetching
+
+  async function checkUsageStatus() {
+    try {
+      const res  = await fetch('/usage-status');
+      const data = await res.json();
+      freeRemaining = data.free_remaining;
+      if (freeRemaining > 0) {
+        freeBanner.style.display = 'flex';
+        usedBanner.style.display = 'none';
+        document.getElementById('freeBannerText').textContent =
+          `You have ${freeRemaining} free analysis today — no API key needed.`;
+      } else {
+        freeBanner.style.display = 'none';
+        usedBanner.style.display = apiKeyInput.value.trim() ? 'none' : 'flex';
+      }
+      updateBtn();
+    } catch (_) {}
+  }
+
+  checkUsageStatus();
+
+  // ── Club selector ──────────────────────────────────────────────────────
+  document.getElementById('clubGrid').addEventListener('click', e => {
+    const btn = e.target.closest('.club-btn');
+    if (!btn) return;
+    document.querySelectorAll('.club-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedClubInput.value = btn.dataset.club;
+  });
+
+  function setupVideoInput(input, card, nameEl, preview) {
+    input.addEventListener('change', () => {
+      const file = input.files[0];
+      if (file) {
+        nameEl.textContent = '✓ ' + file.name;
+        card.classList.add('has-file');
+        preview.src = URL.createObjectURL(file);
+        preview.style.display = 'block';
+        preview.play();
+      }
+      updateBtn();
+    });
+    ['dragover','dragleave','drop'].forEach(evt => {
+      card.addEventListener(evt, e => {
+        e.preventDefault();
+        if (evt === 'dragover') card.classList.add('dragover');
+        else card.classList.remove('dragover');
+        if (evt === 'drop') {
+          const file = e.dataTransfer.files[0];
+          if (file && file.type.startsWith('video/')) {
+            const dt = new DataTransfer(); dt.items.add(file);
+            input.files = dt.files;
+            input.dispatchEvent(new Event('change'));
+          }
+        }
+      });
+    });
+  }
+
+  setupVideoInput(frontInput, frontCard, frontName, frontPreview);
+  setupVideoInput(backInput, backCard, backName, backPreview);
+
+  function updateBtn() {
+    const hasVideo = frontInput.files.length || backInput.files.length;
+    const hasAccess = freeRemaining > 0 || apiKeyInput.value.trim().startsWith('sk-ant-');
+    analyzeBtn.disabled = !(hasVideo && hasAccess);
+    if (hasVideo && !hasAccess) {
+      analyzeBtn.title = 'Enter your API key above to continue';
+    } else {
+      analyzeBtn.title = '';
+    }
+  }
+
+  function renderMarkdown(text) {
+    return text
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>\n?)+/gs, m => `<ul>${m}</ul>`)
+      .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+      .replace(/\n\n+/g, '</p><p>')
+      .trim();
+  }
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    errorBox.style.display = 'none';
+    upgradeBox.style.display = 'none';
+    results.style.display = 'none';
+    loading.style.display = 'block';
+    analyzeBtn.disabled = true;
+
+    const club = selectedClubInput.value;
+    const clubLabel = club ? `${club} Swing` : 'Swing';
+    document.getElementById('loadingTitle').textContent = `Analyzing your ${clubLabel.toLowerCase()}…`;
+
+    const fd = new FormData();
+    if (frontInput.files[0]) fd.append('front_video', frontInput.files[0]);
+    if (backInput.files[0])  fd.append('back_video',  backInput.files[0]);
+    if (club) fd.append('club', club);
+    const userKey = apiKeyInput.value.trim();
+    if (userKey) fd.append('api_key', userKey);
+
+    try {
+      const res  = await fetch('/analyze', { method: 'POST', body: fd });
+      const data = await res.json();
+      loading.style.display = 'none';
+
+      // Free limit reached
+      if (res.status === 402 || data.error === 'free_limit_reached') {
+        upgradeBox.style.display = 'block';
+        freeRemaining = 0;
+        freeBanner.style.display = 'none';
+        usedBanner.style.display = apiKeyInput.value.trim() ? 'none' : 'flex';
+        updateBtn();
+        upgradeBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        return;
+      }
+
+      if (!res.ok || data.error) {
+        errorBox.textContent = '⚠ ' + (data.error || 'Something went wrong. Please try again.');
+        errorBox.style.display = 'block';
+        return;
+      }
+
+      // Used a free analysis — refresh the counter
+      checkUsageStatus();
+
+      // Results header
+      document.getElementById('resultsTitle').textContent = club ? `${club} Analysis Report` : 'Swing Analysis Report';
+      document.getElementById('resultsMeta').textContent  = new Date().toLocaleString();
+
+      // Pose frames
+      const framesSection = document.getElementById('framesSection');
+      const framesTabs    = document.getElementById('framesTabs');
+      const framesGrid    = document.getElementById('framesGrid');
+      framesTabs.innerHTML = '';
+      framesGrid.innerHTML = '';
+      const stageNames = ['Setup','Takeaway','Backswing','Top','Downswing','Impact/Finish'];
+
+      if (data.frames && data.frames.length > 0) {
+        const views = [...new Set(data.frames.map(f => f.view))];
+
+        function renderFrames(filterView) {
+          framesGrid.innerHTML = '';
+          const viewIdx = {};
+          data.frames.forEach(f => {
+            if (filterView !== 'All' && f.view !== filterView) return;
+            viewIdx[f.view] = (viewIdx[f.view] || 0);
+            const stage = stageNames[viewIdx[f.view]] || `Frame ${viewIdx[f.view]+1}`;
+            viewIdx[f.view]++;
+            const card = document.createElement('div');
+            card.className = 'frame-card';
+            card.innerHTML = `<img src="data:image/jpeg;base64,${f.data}" alt="${f.view} ${stage}" loading="lazy"/>
+              <div class="frame-card-label">${f.view} · ${stage}</div>`;
+            framesGrid.appendChild(card);
+          });
+        }
+
+        ['All', ...views].forEach((v, i) => {
+          const btn = document.createElement('button');
+          btn.className = 'frame-tab' + (i === 0 ? ' active' : '');
+          btn.textContent = v === 'All' ? `All (${data.frames.length})` : `${v} View`;
+          btn.addEventListener('click', () => {
+            document.querySelectorAll('.frame-tab').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            renderFrames(v);
+          });
+          framesTabs.appendChild(btn);
+        });
+
+        renderFrames('All');
+        framesSection.style.display = 'block';
+      } else {
+        framesSection.style.display = 'none';
+      }
+
+      // Main analysis
+      analysisContent.innerHTML = `<p>${renderMarkdown(data.analysis)}</p>`;
+
+      // Specialist reports
+      const agentReportsEl = document.getElementById('agentReports');
+      agentReportsEl.innerHTML = '';
+      if (data.agent_reports && data.agent_reports.length > 0) {
+        const heading = document.createElement('p');
+        heading.className = 'specialist-section-title';
+        heading.textContent = 'Individual Specialist Reports';
+        agentReportsEl.appendChild(heading);
+
+        const icons = { 'Body & Posture Coach': '🧍', 'Club & Hands Coach': '🏌️', 'Tempo & Rhythm Coach': '🎵' };
+        data.agent_reports.forEach(r => {
+          const det = document.createElement('details');
+          det.className = 'specialist';
+          const icon = icons[r.name] || '👤';
+          det.innerHTML = `
+            <summary>${icon} ${r.name}</summary>
+            <div class="specialist-body analysis-card" style="border:none;border-radius:0;box-shadow:none;margin:0;padding:1.5rem">
+              <p>${renderMarkdown(r.report)}</p>
+            </div>`;
+          agentReportsEl.appendChild(det);
+        });
+      }
+
+      results.style.display = 'block';
+      results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    } catch (err) {
+      loading.style.display = 'none';
+      errorBox.textContent = '⚠ Network error: ' + err.message;
+      errorBox.style.display = 'block';
+    } finally {
+      analyzeBtn.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

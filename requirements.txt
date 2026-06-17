@@ -1,0 +1,7 @@
+flask>=3.0.0
+anthropic>=0.40.0
+opencv-python>=4.9.0
+python-dotenv>=1.0.0
+mediapipe>=0.10.0
+numpy>=1.24.0
+gunicorn>=21.0.0
