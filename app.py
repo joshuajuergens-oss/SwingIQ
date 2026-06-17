@@ -817,23 +817,31 @@ def analyze():
     AGENT_MODEL     = "claude-opus-4-8"
     SYNTHESIS_MODEL = "claude-opus-4-8"
 
+    # Shared, identical prefix for every Opus call (intro + all frames).
+    # Marking the last block with cache_control caches this whole prefix so the
+    # 3 specialist agents + head coach reuse it instead of re-sending ~50 images.
+    shared_prefix = [{"type": "text", "text": shared_intro}]
+    shared_prefix.extend(image_blocks)
+    if shared_prefix:
+        shared_prefix[-1] = {**shared_prefix[-1], "cache_control": {"type": "ephemeral"}}
+
+    AGENT_INSTRUCTIONS = (
+        "Examine the swing strictly from your specialty. List EVERY issue you can find in your area — "
+        "do not limit yourself to the most important ones. Minor flaws count too. For each issue give:\n"
+        "- A short plain-English title\n"
+        "- What you see (1-2 sentences, simple language a non-golfer understands; explain any golf term in brackets)\n"
+        "- Which frame number(s) show it\n"
+        "- How serious it is: MAJOR, MODERATE, or MINOR\n\n"
+        "Also list anything in your specialty the golfer does WELL.\n"
+        "Be honest and thorough — another coach will cross-check your findings."
+    )
+
     def run_agent(agent: dict) -> str:
-        blocks = [{"type": "text", "text": agent["persona"] + "\n\n" + shared_intro}]
-        blocks.extend(image_blocks)
-        blocks.append({
+        # Persona + instructions come AFTER the cached prefix so the prefix stays identical.
+        blocks = shared_prefix + [{
             "type": "text",
-            "text": (
-                "Examine the swing strictly from your specialty. List EVERY issue you can find in your area — "
-                "do not limit yourself to the most important ones. Minor flaws count too. For each issue give:\n"
-                "- A short plain-English title\n"
-                "- What you see (1-2 sentences, simple language a non-golfer understands; explain any golf term in brackets)\n"
-                "- Which frame number(s) show it\n"
-                "- How serious it is: MAJOR, MODERATE, or MINOR\n\n"
-                "Also list anything in your specialty the golfer does WELL.\n"
-                "Be honest and thorough — another coach will cross-check your findings."
-            ),
-        })
-        # Plain call — adaptive thinking handled by synthesis step
+            "text": agent["persona"] + "\n\n" + AGENT_INSTRUCTIONS,
+        }]
         response = ai_client.messages.create(
             model=AGENT_MODEL,
             max_tokens=2000,
@@ -842,14 +850,21 @@ def analyze():
         return "".join(b.text for b in response.content if b.type == "text")
 
     total_kb = sum(len(b) * 3 // 4 // 1024 for b in front_frames + back_frames)
-    print(f"Running 3 specialist agents [{AGENT_MODEL}] in parallel "
+    print(f"Running 3 specialist agents [{AGENT_MODEL}] "
           f"({len(front_frames)} front + {len(back_frames)} back frames, ~{total_kb} KB each) "
           f"| free={using_free}")
 
     try:
-        with ThreadPoolExecutor(max_workers=3) as pool:
-            futures = {pool.submit(run_agent, a): a["name"] for a in AGENTS}
-            agent_reports = {}
+        agent_reports = {}
+        # Warm the cache with the first agent so the prefix is written once,
+        # then the remaining agents + head coach all read from cache.
+        first = AGENTS[0]
+        agent_reports[first["name"]] = run_agent(first)
+        print(f"  ✓ {first['name']} finished (cache warmed)")
+
+        rest = AGENTS[1:]
+        with ThreadPoolExecutor(max_workers=len(rest)) as pool:
+            futures = {pool.submit(run_agent, a): a["name"] for a in rest}
             for fut in as_completed(futures):
                 name = futures[fut]
                 agent_reports[name] = fut.result()
@@ -861,19 +876,14 @@ def analyze():
             for a in AGENTS
         )
 
-        synthesis_blocks = [{
+        # Reuse the same cached image prefix, then append head-coach-specific text.
+        synthesis_blocks = shared_prefix + [{
             "type": "text",
             "text": (
                 "You are the HEAD GOLF COACH. Three specialist coaches each reviewed the same golf swing "
                 "independently — one focused on the body, one on the club and hands, one on tempo and rhythm. "
-                "Their full reports are below. The swing frames are also attached so you can verify their claims.\n\n"
-                + shared_intro + "\n\n" + report_text
-            ),
-        }]
-        synthesis_blocks.extend(image_blocks)
-        synthesis_blocks.append({
-            "type": "text",
-            "text": (
+                "Their full reports are below. The swing frames are attached above so you can verify their claims.\n\n"
+                + report_text + "\n\n"
                 "Write the final coaching report in plain, everyday language anyone can understand — even "
                 "someone who has never played golf. Explain any golf term in brackets immediately. "
                 "Use exactly this structure:\n\n"
@@ -899,7 +909,7 @@ def analyze():
                 "A short numbered list: which issue to work on first, second, third, and so on — and why that order. "
                 "Fixing one thing often fixes others downstream; use that logic."
             ),
-        })
+        }]
 
         print(f"Running head-coach synthesis [{SYNTHESIS_MODEL}]...")
         analysis_text = ""
