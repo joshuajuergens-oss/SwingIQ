@@ -193,7 +193,6 @@ def _pose_angles(landmarks, w, h) -> dict:
     return {k: round(v, 1) for k, v in angles.items()}
 
 
-STAGE_NAMES = SWING_PHASES  # alias kept for build_image_blocks compatibility
 
 
 def detect_swing_start(cap, total: int, sample_every: int = 3) -> int:
@@ -261,6 +260,8 @@ SWING_PHASES = [
     "MID FOLLOW-THROUGH",
     "FINISH",
 ]
+
+STAGE_NAMES = SWING_PHASES  # alias for build_image_blocks
 
 
 def extract_frames(video_path: str, num_frames: int = 10):
