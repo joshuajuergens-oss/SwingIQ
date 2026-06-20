@@ -992,15 +992,6 @@
       ⚠️ <span>You've used your free analysis for today. Enter your Anthropic API key below to continue — it's free to sign up.</span>
     </div>
 
-    <!-- Email gate for the free analysis -->
-    <div class="api-key-wrap" id="emailGate">
-      <label>Your Email <span style="font-weight:400;text-transform:none;letter-spacing:0">— required for your free analysis</span></label>
-      <div class="api-key-row">
-        <input type="email" class="api-key-input" id="emailInput" placeholder="you@example.com" autocomplete="email" spellcheck="false" />
-      </div>
-      <p class="api-key-hint" id="emailHint">We use this to give you one free analysis. No spam.</p>
-    </div>
-
     <div class="api-key-wrap">
       <label>Your Anthropic API Key <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional while you have free analyses)</span></label>
       <div class="api-key-row">
@@ -1180,6 +1171,23 @@
     </div>
   </div>
 
+</div>
+
+<!-- EMAIL MODAL -->
+<div id="emailModal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.55);align-items:center;justify-content:center;padding:1rem;">
+  <div style="background:var(--white);border-radius:var(--radius);max-width:420px;width:100%;padding:2rem;box-shadow:var(--shadow-lg);">
+    <div style="font-size:1.3rem;font-weight:700;margin-bottom:.5rem;">One quick step ⛳</div>
+    <p style="color:var(--gray-600);font-size:.9rem;margin-bottom:1.25rem;">
+      Enter your email to unlock your free swing analysis. No spam — just your results.
+    </p>
+    <input type="email" class="api-key-input" id="emailInput" placeholder="you@example.com"
+           autocomplete="email" spellcheck="false" style="width:100%;margin-bottom:.5rem;" />
+    <div id="emailModalError" style="color:#c0392b;font-size:.82rem;min-height:1.1rem;margin-bottom:.75rem;"></div>
+    <div style="display:flex;gap:.75rem;">
+      <button type="button" id="emailModalCancel" class="window-btn" style="flex:1;">Cancel</button>
+      <button type="button" id="emailModalContinue" class="window-btn green" style="flex:2;">Continue →</button>
+    </div>
+  </div>
 </div>
 
 <!-- FOOTER -->
@@ -1413,19 +1421,12 @@
   function updateBtn() {
     const hasVideo = frontInput.files.length || backInput.files.length;
     const hasKey   = apiKeyInput.value.trim().startsWith('sk-ant-');
-    const hasEmail = validEmail(emailInput.value);
-    // Free use requires a valid email; an API key bypasses the email gate.
-    const hasAccess = hasKey || (freeRemaining > 0 && hasEmail);
+    // Email is collected via a popup on click, so the button only needs a
+    // video plus either a free analysis available or a valid API key.
+    const hasAccess = hasKey || freeRemaining > 0;
     analyzeBtn.disabled = !(hasVideo && hasAccess);
-    if (hasVideo && !hasAccess) {
-      analyzeBtn.title = hasKey ? '' :
-        (freeRemaining > 0 ? 'Enter your email above to use your free analysis'
-                           : 'Enter your API key above to continue');
-    } else {
-      analyzeBtn.title = '';
-    }
-    // Hide the email gate once they're using their own API key
-    document.getElementById('emailGate').style.display = hasKey ? 'none' : 'block';
+    analyzeBtn.title = (hasVideo && !hasAccess)
+      ? 'Enter your API key above to continue' : '';
   }
 
   function renderMarkdown(text) {
@@ -1440,8 +1441,52 @@
       .trim();
   }
 
-  form.addEventListener('submit', async e => {
+  // Email modal elements
+  const emailModal         = document.getElementById('emailModal');
+  const emailModalError    = document.getElementById('emailModalError');
+  const emailModalContinue = document.getElementById('emailModalContinue');
+  const emailModalCancel   = document.getElementById('emailModalCancel');
+
+  function openEmailModal() {
+    emailModalError.textContent = '';
+    emailModal.style.display = 'flex';
+    emailInput.focus();
+  }
+  function closeEmailModal() {
+    emailModal.style.display = 'none';
+  }
+
+  emailModalCancel.addEventListener('click', closeEmailModal);
+  emailModal.addEventListener('click', e => { if (e.target === emailModal) closeEmailModal(); });
+
+  emailModalContinue.addEventListener('click', () => {
+    const val = emailInput.value.trim();
+    if (!validEmail(val)) {
+      emailModalError.textContent = 'Please enter a valid email address.';
+      return;
+    }
+    localStorage.setItem('swingiq_email', val);
+    closeEmailModal();
+    runAnalysis();
+  });
+  emailInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); emailModalContinue.click(); }
+  });
+
+  // On submit: API-key users go straight through; free users get the email popup
+  // (unless they already gave a valid email earlier this session).
+  form.addEventListener('submit', e => {
     e.preventDefault();
+    const hasKey = apiKeyInput.value.trim().startsWith('sk-ant-');
+    const savedEmail = (localStorage.getItem('swingiq_email') || '').trim();
+    if (!hasKey && !validEmail(savedEmail)) {
+      openEmailModal();
+      return;
+    }
+    runAnalysis();
+  });
+
+  async function runAnalysis() {
     errorBox.style.display = 'none';
     upgradeBox.style.display = 'none';
     results.style.display = 'none';
@@ -1460,7 +1505,7 @@
     if (swingEndSec.value)   fd.append('swing_end_sec',   swingEndSec.value);
     const userKey = apiKeyInput.value.trim();
     if (userKey) fd.append('api_key', userKey);
-    const email = emailInput.value.trim();
+    const email = (localStorage.getItem('swingiq_email') || '').trim();
     if (email) fd.append('email', email);
 
     try {
@@ -1498,7 +1543,7 @@
     } finally {
       analyzeBtn.disabled = false;
     }
-  });
+  }
 
   // ── Render a result object into the results panel (live or from history) ──
   function displayResult(data, club, whenStr) {
