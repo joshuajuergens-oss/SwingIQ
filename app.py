@@ -151,31 +151,84 @@ def get_device_id() -> str:
     return request.cookies.get("swingiq_device") or uuid.uuid4().hex
 
 
-def free_analyses_remaining(ip: str, device: str) -> int:
+# --- Email validation + disposable-domain protection ----------------------
+import re as _re
+
+# Common disposable / temp-mail domains. Not exhaustive, but blocks the popular ones.
+DISPOSABLE_DOMAINS = {
+    "mailinator.com", "guerrillamail.com", "guerrillamail.info", "sharklasers.com",
+    "10minutemail.com", "10minutemail.net", "tempmail.com", "temp-mail.org",
+    "tempmailo.com", "throwawaymail.com", "yopmail.com", "yopmail.net",
+    "getnada.com", "nada.email", "trashmail.com", "trashmail.de", "dispostable.com",
+    "fakeinbox.com", "maildrop.cc", "mailnesia.com", "mintemail.com", "mohmal.com",
+    "mytemp.email", "tempinbox.com", "spamgourmet.com", "mailcatch.com",
+    "emailondeck.com", "fakemailgenerator.com", "tempr.email", "discard.email",
+    "33mail.com", "burnermail.io", "guerrillamailblock.com", "grr.la", "spam4.me",
+    "tmpmail.org", "tmpmail.net", "minuteinbox.com", "moakt.com", "luxusmail.org",
+    "inboxkitten.com", "emailfake.com", "tempmail.plus", "mailpoof.com",
+    "harakirimail.com", "anonbox.net", "vomoto.com", "tempemail.co", "0wnd.net",
+}
+
+_EMAIL_RE = _re.compile(r"^[^@\s]+@([^@\s]+\.[^@\s]+)$")
+
+
+def normalize_email(email: str) -> str:
+    """Lowercase, strip plus-tags, and ignore dots for Gmail to stop trivial bypass."""
+    email = email.strip().lower()
+    m = _EMAIL_RE.match(email)
+    if not m:
+        return email
+    local, domain = email.split("@", 1)
+    local = local.split("+", 1)[0]  # drop +tag aliases
+    if domain in ("gmail.com", "googlemail.com"):
+        local = local.replace(".", "")
+        domain = "gmail.com"
+    return f"{local}@{domain}"
+
+
+def validate_email(email: str) -> str | None:
+    """Return None if the email is acceptable, else an error message."""
+    email = email.strip().lower()
+    m = _EMAIL_RE.match(email)
+    if not m:
+        return "Please enter a valid email address."
+    domain = m.group(1)
+    if domain in DISPOSABLE_DOMAINS:
+        return "Temporary/disposable email addresses aren't allowed. Please use a real email."
+    return None
+
+
+def free_analyses_remaining(ip: str, device: str, email: str = "") -> int:
     today = str(date.today())
-    used_ip  = _count(f"ip:{ip}", today)
-    used_dev = _count(f"dev:{device}", today) if device else 0
-    used = max(used_ip, used_dev)   # whichever has been used more is the limit
+    used = max(
+        _count(f"ip:{ip}", today),
+        _count(f"dev:{device}", today) if device else 0,
+        _count(f"email:{email}", today) if email else 0,
+    )
     return max(0, FREE_LIMIT - used)
 
 
-def consume_free_analysis(ip: str, device: str) -> bool:
+def consume_free_analysis(ip: str, device: str, email: str = "") -> bool:
     """Reserve one free analysis. Returns True if allowed, False if limit reached."""
-    if free_analyses_remaining(ip, device) <= 0:
+    if free_analyses_remaining(ip, device, email) <= 0:
         return False
     today = str(date.today())
     _bump(f"ip:{ip}", today, 1)
     if device:
         _bump(f"dev:{device}", today, 1)
+    if email:
+        _bump(f"email:{email}", today, 1)
     return True
 
 
-def refund_free_analysis(ip: str, device: str) -> None:
+def refund_free_analysis(ip: str, device: str, email: str = "") -> None:
     """Return a reserved free analysis slot (called on error)."""
     today = str(date.today())
     _bump(f"ip:{ip}", today, -1)
     if device:
         _bump(f"dev:{device}", today, -1)
+    if email:
+        _bump(f"email:{email}", today, -1)
 
 
 try:
@@ -754,6 +807,7 @@ def analyze():
     user_key = request.form.get("api_key", "").strip()
     ip = _get_ip()
     device = get_device_id()
+    email = ""
     using_free = False
 
     if user_key:
@@ -763,8 +817,15 @@ def analyze():
             return jsonify({"error": err}), 401
         ai_client = make_client(user_key)
     else:
-        # Try to consume a free analysis
-        if not consume_free_analysis(ip, device):
+        # Free use requires a valid, non-disposable email
+        raw_email = request.form.get("email", "").strip()
+        email_err = validate_email(raw_email)
+        if email_err:
+            return jsonify({"error": email_err}), 400
+        email = normalize_email(raw_email)
+
+        # Try to consume a free analysis (tracked by email + device + IP)
+        if not consume_free_analysis(ip, device, email):
             return jsonify({
                 "error": "free_limit_reached",
                 "message": "You've used your 1 free analysis for today. "
@@ -800,7 +861,7 @@ def analyze():
     except Exception as exc:
         traceback.print_exc()
         if using_free:
-            refund_free_analysis(ip, device)
+            refund_free_analysis(ip, device, email)
         return jsonify({"error": f"Frame extraction failed: {str(exc)}"}), 422
     finally:
         for p in saved_paths.values():
@@ -811,7 +872,7 @@ def analyze():
 
     if not front_frames and not back_frames:
         if using_free:
-            refund_free_analysis(ip, device)
+            refund_free_analysis(ip, device, email)
         return jsonify({"error": "Could not extract frames from the video. Check the file format (MP4/MOV recommended)."}), 422
 
     pose_data_block = ""
@@ -1027,7 +1088,7 @@ def analyze():
     except anthropic.APIStatusError as exc:
         traceback.print_exc()
         if using_free:
-            refund_free_analysis(ip, device)
+            refund_free_analysis(ip, device, email)
         status = exc.status_code
         if status in (502, 503, 504):
             msg = f"Anthropic's servers returned a temporary {status} error. Please wait a moment and try again."
@@ -1045,17 +1106,17 @@ def analyze():
     except anthropic.APITimeoutError:
         traceback.print_exc()
         if using_free:
-            refund_free_analysis(ip, device)
+            refund_free_analysis(ip, device, email)
         return jsonify({"error": "Request timed out. Try again — the server may be busy."}), 504
     except anthropic.APIConnectionError as exc:
         traceback.print_exc()
         if using_free:
-            refund_free_analysis(ip, device)
+            refund_free_analysis(ip, device, email)
         return jsonify({"error": f"Connection error: {str(exc)[:200]}"}), 502
 
     if not analysis_text.strip():
         if using_free:
-            refund_free_analysis(ip, device)
+            refund_free_analysis(ip, device, email)
         return jsonify({"error": "Claude returned an empty response. Please try again."}), 502
 
     # --- Frame selector (Haiku 4.5): pick the 9 key swing positions to display ---

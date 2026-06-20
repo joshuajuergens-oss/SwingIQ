@@ -991,6 +991,16 @@
     <div id="usedBanner" class="used-banner" style="display:none">
       ⚠️ <span>You've used your free analysis for today. Enter your Anthropic API key below to continue — it's free to sign up.</span>
     </div>
+
+    <!-- Email gate for the free analysis -->
+    <div class="api-key-wrap" id="emailGate">
+      <label>Your Email <span style="font-weight:400;text-transform:none;letter-spacing:0">— required for your free analysis</span></label>
+      <div class="api-key-row">
+        <input type="email" class="api-key-input" id="emailInput" placeholder="you@example.com" autocomplete="email" spellcheck="false" />
+      </div>
+      <p class="api-key-hint" id="emailHint">We use this to give you one free analysis. No spam.</p>
+    </div>
+
     <div class="api-key-wrap">
       <label>Your Anthropic API Key <span style="font-weight:400;text-transform:none;letter-spacing:0">(optional while you have free analyses)</span></label>
       <div class="api-key-row">
@@ -1196,17 +1206,31 @@
   const upgradeBox      = document.getElementById('upgradeBox');
   const selectedClubInput = document.getElementById('selectedClub');
   const apiKeyInput     = document.getElementById('apiKeyInput');
+  const emailInput      = document.getElementById('emailInput');
   const freeBanner      = document.getElementById('freeBanner');
   const usedBanner      = document.getElementById('usedBanner');
 
-  // ── Restore saved API key ──────────────────────────────────────────────
+  // ── Restore saved API key + email ──────────────────────────────────────
   const savedKey = localStorage.getItem('swingiq_api_key') || '';
   if (savedKey) apiKeyInput.value = savedKey;
+  const savedEmail = localStorage.getItem('swingiq_email') || '';
+  if (savedEmail) emailInput.value = savedEmail;
 
   apiKeyInput.addEventListener('input', () => {
     const val = apiKeyInput.value.trim();
     if (val) localStorage.setItem('swingiq_api_key', val);
     else localStorage.removeItem('swingiq_api_key');
+    updateBtn();
+  });
+
+  function validEmail(e) {
+    return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e.trim());
+  }
+
+  emailInput.addEventListener('input', () => {
+    const val = emailInput.value.trim();
+    if (val) localStorage.setItem('swingiq_email', val);
+    else localStorage.removeItem('swingiq_email');
     updateBtn();
   });
 
@@ -1388,13 +1412,20 @@
 
   function updateBtn() {
     const hasVideo = frontInput.files.length || backInput.files.length;
-    const hasAccess = freeRemaining > 0 || apiKeyInput.value.trim().startsWith('sk-ant-');
+    const hasKey   = apiKeyInput.value.trim().startsWith('sk-ant-');
+    const hasEmail = validEmail(emailInput.value);
+    // Free use requires a valid email; an API key bypasses the email gate.
+    const hasAccess = hasKey || (freeRemaining > 0 && hasEmail);
     analyzeBtn.disabled = !(hasVideo && hasAccess);
     if (hasVideo && !hasAccess) {
-      analyzeBtn.title = 'Enter your API key above to continue';
+      analyzeBtn.title = hasKey ? '' :
+        (freeRemaining > 0 ? 'Enter your email above to use your free analysis'
+                           : 'Enter your API key above to continue');
     } else {
       analyzeBtn.title = '';
     }
+    // Hide the email gate once they're using their own API key
+    document.getElementById('emailGate').style.display = hasKey ? 'none' : 'block';
   }
 
   function renderMarkdown(text) {
@@ -1429,6 +1460,8 @@
     if (swingEndSec.value)   fd.append('swing_end_sec',   swingEndSec.value);
     const userKey = apiKeyInput.value.trim();
     if (userKey) fd.append('api_key', userKey);
+    const email = emailInput.value.trim();
+    if (email) fd.append('email', email);
 
     try {
       const res  = await fetch('/analyze', { method: 'POST', body: fd });
