@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
+usage.db
+results.csv
+test_videos/

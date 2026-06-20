@@ -1155,6 +1155,21 @@
     <div class="specialist-section" id="agentReports"></div>
   </div>
 
+  <!-- HISTORY -->
+  <div id="historySection" style="display:none;">
+    <div class="results-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="results-title">Your Swing History</div>
+      <button type="button" id="clearHistoryBtn" class="window-btn">Clear All</button>
+    </div>
+    <p style="font-size:0.8rem;color:var(--gray-600);margin-bottom:1rem;">
+      Saved on this device only. Click any past analysis to view it again.
+    </p>
+    <div id="historyList"></div>
+    <div id="historyEmpty" style="text-align:center;color:var(--gray-400);padding:2rem;display:none;">
+      No saved analyses yet. Run your first swing analysis to see it here.
+    </div>
+  </div>
+
 </div>
 
 <!-- FOOTER -->
@@ -1440,9 +1455,26 @@
       // Used a free analysis — refresh the counter
       checkUsageStatus();
 
+      displayResult(data, club, new Date().toLocaleString());
+      saveToHistory(data, club);
+
+    } catch (err) {
+      loading.style.display = 'none';
+      errorBox.textContent = '⚠ Network error: ' + err.message;
+      errorBox.style.display = 'block';
+    } finally {
+      analyzeBtn.disabled = false;
+    }
+  });
+
+  // ── Render a result object into the results panel (live or from history) ──
+  function displayResult(data, club, whenStr) {
+      results.style.display = 'block';
+      historySection.style.display = 'none';
+
       // Results header
       document.getElementById('resultsTitle').textContent = club ? `${club} Analysis Report` : 'Swing Analysis Report';
-      document.getElementById('resultsMeta').textContent  = new Date().toLocaleString();
+      document.getElementById('resultsMeta').textContent  = whenStr || '';
 
       // Pose frames
       const framesSection = document.getElementById('framesSection');
@@ -1513,13 +1545,95 @@
 
       results.style.display = 'block';
       results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 
-    } catch (err) {
-      loading.style.display = 'none';
-      errorBox.textContent = '⚠ Network error: ' + err.message;
-      errorBox.style.display = 'block';
-    } finally {
-      analyzeBtn.disabled = false;
+  // ── History (saved per device in localStorage) ──────────────────────────
+  const HISTORY_KEY = 'swingiq_history';
+  const historySection = document.getElementById('historySection');
+  const historyList     = document.getElementById('historyList');
+  const historyEmpty    = document.getElementById('historyEmpty');
+
+  function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+    catch (_) { return []; }
+  }
+
+  function saveToHistory(data, club) {
+    const history = loadHistory();
+    const entry = {
+      id: Date.now(),
+      date: new Date().toLocaleString(),
+      club: club || '',
+      data: data,
+    };
+    history.unshift(entry);
+    // Keep the most recent 10; drop oldest if we hit the storage quota
+    while (history.length > 0) {
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 10)));
+        break;
+      } catch (e) {
+        history.pop(); // too big — drop the oldest and retry
+      }
+    }
+  }
+
+  function renderHistory() {
+    const history = loadHistory();
+    historyList.innerHTML = '';
+    historyEmpty.style.display = history.length ? 'none' : 'block';
+    history.forEach(entry => {
+      const card = document.createElement('div');
+      card.className = 'analysis-card';
+      card.style.cssText = 'cursor:pointer;margin-bottom:0.75rem;padding:1rem 1.25rem;display:flex;justify-content:space-between;align-items:center;';
+      const title = entry.club ? `${entry.club} Swing` : 'Swing Analysis';
+      card.innerHTML = `
+        <div>
+          <div style="font-weight:600;">${title}</div>
+          <div style="font-size:0.8rem;color:var(--gray-400);">${entry.date}</div>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <span class="window-btn green" style="pointer-events:none;">View →</span>
+          <button class="window-btn" data-del="${entry.id}" title="Delete">✕</button>
+        </div>`;
+      card.addEventListener('click', e => {
+        if (e.target.dataset.del) return;
+        displayResult(entry.data, entry.club, entry.date);
+        results.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      historyList.appendChild(card);
+    });
+    // Wire delete buttons
+    historyList.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = Number(btn.dataset.del);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(loadHistory().filter(h => h.id !== id)));
+        renderHistory();
+      });
+    });
+  }
+
+  // History nav link toggles the history view
+  document.querySelectorAll('.nav-link').forEach(link => {
+    if (link.textContent.trim() === 'History') {
+      link.addEventListener('click', e => {
+        e.preventDefault();
+        results.style.display = 'none';
+        const showing = historySection.style.display !== 'none';
+        historySection.style.display = showing ? 'none' : 'block';
+        if (!showing) {
+          renderHistory();
+          historySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+  });
+
+  document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+    if (confirm('Delete all saved swing analyses on this device?')) {
+      localStorage.removeItem(HISTORY_KEY);
+      renderHistory();
     }
   });
 </script>

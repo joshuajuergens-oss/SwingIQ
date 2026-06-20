@@ -53,10 +53,47 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 # ---------------------------------------------------------------------------
 # Usage tracking  (1 free analysis per IP per calendar day)
 # ---------------------------------------------------------------------------
+# Free-usage tracking — SQLite so the count is SHARED across gunicorn workers
+# and survives restarts (an in-memory dict gave each worker its own count, which
+# let users get extra free scans by reloading). Keyed by BOTH a device cookie and
+# the client IP, so clearing one doesn't grant another scan.
+# ---------------------------------------------------------------------------
+import sqlite3
+
 FREE_LIMIT = 1
 _usage_lock = threading.Lock()
-# { ip: { "2026-06-15": count } }
-_usage: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+DB_PATH = os.path.join(os.path.dirname(__file__), "usage.db")
+
+
+def _db():
+    conn = sqlite3.connect(DB_PATH, timeout=10)
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS usage "
+        "(key TEXT, day TEXT, count INTEGER, PRIMARY KEY(key, day))"
+    )
+    return conn
+
+
+def _count(key: str, day: str) -> int:
+    with _usage_lock:
+        conn = _db()
+        row = conn.execute(
+            "SELECT count FROM usage WHERE key=? AND day=?", (key, day)
+        ).fetchone()
+        conn.close()
+    return row[0] if row else 0
+
+
+def _bump(key: str, day: str, delta: int) -> None:
+    with _usage_lock:
+        conn = _db()
+        conn.execute(
+            "INSERT INTO usage(key, day, count) VALUES(?,?,?) "
+            "ON CONFLICT(key, day) DO UPDATE SET count = MAX(0, count + ?)",
+            (key, day, max(0, delta), delta),
+        )
+        conn.commit()
+        conn.close()
 
 
 def _get_ip() -> str:
@@ -68,29 +105,36 @@ def _get_ip() -> str:
     )
 
 
-def free_analyses_remaining(ip: str) -> int:
+def get_device_id() -> str:
+    """Read the device id from the cookie, or mint a new one (set later on the response)."""
+    return request.cookies.get("swingiq_device") or uuid.uuid4().hex
+
+
+def free_analyses_remaining(ip: str, device: str) -> int:
     today = str(date.today())
-    with _usage_lock:
-        used = _usage[ip][today]
+    used_ip  = _count(f"ip:{ip}", today)
+    used_dev = _count(f"dev:{device}", today) if device else 0
+    used = max(used_ip, used_dev)   # whichever has been used more is the limit
     return max(0, FREE_LIMIT - used)
 
 
-def consume_free_analysis(ip: str) -> bool:
-    """Reserve one free analysis slot. Returns True if allowed, False if limit reached."""
+def consume_free_analysis(ip: str, device: str) -> bool:
+    """Reserve one free analysis. Returns True if allowed, False if limit reached."""
+    if free_analyses_remaining(ip, device) <= 0:
+        return False
     today = str(date.today())
-    with _usage_lock:
-        if _usage[ip][today] >= FREE_LIMIT:
-            return False
-        _usage[ip][today] += 1
-        return True
+    _bump(f"ip:{ip}", today, 1)
+    if device:
+        _bump(f"dev:{device}", today, 1)
+    return True
 
 
-def refund_free_analysis(ip: str) -> None:
-    """Return a previously reserved free analysis slot (called on error)."""
+def refund_free_analysis(ip: str, device: str) -> None:
+    """Return a reserved free analysis slot (called on error)."""
     today = str(date.today())
-    with _usage_lock:
-        if _usage[ip][today] > 0:
-            _usage[ip][today] -= 1
+    _bump(f"ip:{ip}", today, -1)
+    if device:
+        _bump(f"dev:{device}", today, -1)
 
 
 # ---------------------------------------------------------------------------
@@ -630,8 +674,14 @@ def index():
 @app.route("/usage-status")
 def usage_status():
     ip = _get_ip()
-    remaining = free_analyses_remaining(ip)
-    return jsonify({"free_remaining": remaining, "free_limit": FREE_LIMIT})
+    device = get_device_id()
+    remaining = free_analyses_remaining(ip, device)
+    resp = jsonify({"free_remaining": remaining, "free_limit": FREE_LIMIT})
+    # Persist the device id so reloads/new tabs are recognized as the same user
+    if not request.cookies.get("swingiq_device"):
+        resp.set_cookie("swingiq_device", device, max_age=60 * 60 * 24 * 365,
+                        samesite="Lax")
+    return resp
 
 
 @app.route("/debug-status")
@@ -655,6 +705,7 @@ def analyze():
     # ── Key / free-usage check ─────────────────────────────────────────────
     user_key = request.form.get("api_key", "").strip()
     ip = _get_ip()
+    device = get_device_id()
     using_free = False
 
     if user_key:
@@ -665,7 +716,7 @@ def analyze():
         ai_client = make_client(user_key)
     else:
         # Try to consume a free analysis
-        if not consume_free_analysis(ip):
+        if not consume_free_analysis(ip, device):
             return jsonify({
                 "error": "free_limit_reached",
                 "message": "You've used your 1 free analysis for today. "
@@ -701,7 +752,7 @@ def analyze():
     except Exception as exc:
         traceback.print_exc()
         if using_free:
-            refund_free_analysis(ip)
+            refund_free_analysis(ip, device)
         return jsonify({"error": f"Frame extraction failed: {str(exc)}"}), 422
     finally:
         for p in saved_paths.values():
@@ -712,7 +763,7 @@ def analyze():
 
     if not front_frames and not back_frames:
         if using_free:
-            refund_free_analysis(ip)
+            refund_free_analysis(ip, device)
         return jsonify({"error": "Could not extract frames from the video. Check the file format (MP4/MOV recommended)."}), 422
 
     pose_data_block = ""
@@ -928,7 +979,7 @@ def analyze():
     except anthropic.APIStatusError as exc:
         traceback.print_exc()
         if using_free:
-            refund_free_analysis(ip)
+            refund_free_analysis(ip, device)
         status = exc.status_code
         if status in (502, 503, 504):
             msg = f"Anthropic's servers returned a temporary {status} error. Please wait a moment and try again."
@@ -946,17 +997,17 @@ def analyze():
     except anthropic.APITimeoutError:
         traceback.print_exc()
         if using_free:
-            refund_free_analysis(ip)
+            refund_free_analysis(ip, device)
         return jsonify({"error": "Request timed out. Try again — the server may be busy."}), 504
     except anthropic.APIConnectionError as exc:
         traceback.print_exc()
         if using_free:
-            refund_free_analysis(ip)
+            refund_free_analysis(ip, device)
         return jsonify({"error": f"Connection error: {str(exc)[:200]}"}), 502
 
     if not analysis_text.strip():
         if using_free:
-            refund_free_analysis(ip)
+            refund_free_analysis(ip, device)
         return jsonify({"error": "Claude returned an empty response. Please try again."}), 502
 
     # --- Frame selector (Haiku 4.5): pick the 9 key swing positions to display ---
