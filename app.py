@@ -64,36 +64,77 @@ FREE_LIMIT = 1
 _usage_lock = threading.Lock()
 DB_PATH = os.path.join(os.path.dirname(__file__), "usage.db")
 
+# Use Railway Postgres if DATABASE_URL is set (persists across redeploys);
+# otherwise fall back to a local SQLite file for development.
+_DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+USE_POSTGRES = _DATABASE_URL.startswith(("postgres://", "postgresql://"))
 
-def _db():
-    conn = sqlite3.connect(DB_PATH, timeout=10)
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS usage "
-        "(key TEXT, day TEXT, count INTEGER, PRIMARY KEY(key, day))"
-    )
-    return conn
+if USE_POSTGRES:
+    import psycopg2
+    # Railway sometimes hands out the old "postgres://" scheme
+    if _DATABASE_URL.startswith("postgres://"):
+        _DATABASE_URL = "postgresql://" + _DATABASE_URL[len("postgres://"):]
+    print("[startup] Usage tracking: PostgreSQL (persistent)")
+else:
+    print("[startup] Usage tracking: SQLite (local file)")
+
+
+def _init_db():
+    if USE_POSTGRES:
+        conn = psycopg2.connect(_DATABASE_URL, connect_timeout=10)
+        with conn, conn.cursor() as cur:
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS usage "
+                "(key TEXT, day TEXT, count INTEGER, PRIMARY KEY(key, day))"
+            )
+        conn.close()
+    else:
+        conn = sqlite3.connect(DB_PATH, timeout=10)
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS usage "
+            "(key TEXT, day TEXT, count INTEGER, PRIMARY KEY(key, day))"
+        )
+        conn.commit()
+        conn.close()
 
 
 def _count(key: str, day: str) -> int:
     with _usage_lock:
-        conn = _db()
-        row = conn.execute(
-            "SELECT count FROM usage WHERE key=? AND day=?", (key, day)
-        ).fetchone()
-        conn.close()
+        if USE_POSTGRES:
+            conn = psycopg2.connect(_DATABASE_URL, connect_timeout=10)
+            with conn, conn.cursor() as cur:
+                cur.execute("SELECT count FROM usage WHERE key=%s AND day=%s", (key, day))
+                row = cur.fetchone()
+            conn.close()
+        else:
+            conn = sqlite3.connect(DB_PATH, timeout=10)
+            row = conn.execute(
+                "SELECT count FROM usage WHERE key=? AND day=?", (key, day)
+            ).fetchone()
+            conn.close()
     return row[0] if row else 0
 
 
 def _bump(key: str, day: str, delta: int) -> None:
     with _usage_lock:
-        conn = _db()
-        conn.execute(
-            "INSERT INTO usage(key, day, count) VALUES(?,?,?) "
-            "ON CONFLICT(key, day) DO UPDATE SET count = MAX(0, count + ?)",
-            (key, day, max(0, delta), delta),
-        )
-        conn.commit()
-        conn.close()
+        if USE_POSTGRES:
+            conn = psycopg2.connect(_DATABASE_URL, connect_timeout=10)
+            with conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO usage(key, day, count) VALUES(%s, %s, %s) "
+                    "ON CONFLICT (key, day) DO UPDATE SET count = GREATEST(0, usage.count + %s)",
+                    (key, day, max(0, delta), delta),
+                )
+            conn.close()
+        else:
+            conn = sqlite3.connect(DB_PATH, timeout=10)
+            conn.execute(
+                "INSERT INTO usage(key, day, count) VALUES(?,?,?) "
+                "ON CONFLICT(key, day) DO UPDATE SET count = MAX(0, count + ?)",
+                (key, day, max(0, delta), delta),
+            )
+            conn.commit()
+            conn.close()
 
 
 def _get_ip() -> str:
@@ -135,6 +176,13 @@ def refund_free_analysis(ip: str, device: str) -> None:
     _bump(f"ip:{ip}", today, -1)
     if device:
         _bump(f"dev:{device}", today, -1)
+
+
+try:
+    _init_db()
+    print("[startup] Usage database ready ✓")
+except Exception as _db_err:
+    print(f"[startup] WARNING: could not initialize usage DB ({_db_err})")
 
 
 # ---------------------------------------------------------------------------
