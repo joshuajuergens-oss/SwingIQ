@@ -278,6 +278,16 @@ def too_large(_e):
     return jsonify({"error": "File too large. Maximum upload size is 500 MB."}), 413
 
 
+@app.after_request
+def no_cache_html(resp):
+    """Don't let browsers cache the HTML pages, so nav/UI changes show immediately."""
+    if resp.mimetype == "text/html":
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
+
+
 # ---------------------------------------------------------------------------
 # Pose helpers
 # ---------------------------------------------------------------------------
