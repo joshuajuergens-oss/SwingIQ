@@ -777,6 +777,97 @@ def select_key_frames(ai_client, frames_b64: list[str], view_label: str,
     return selected
 
 
+def _extract_major_moderate_issues(analysis_text: str) -> list[str]:
+    """Pull **Bold Title** entries from the Major and Moderate issue sub-sections."""
+    import re
+    m = re.search(r'## The Complete Issue List(.*?)(?=\n## |\Z)', analysis_text, re.DOTALL)
+    section = m.group(1) if m else analysis_text
+    relevant = re.search(r'(### Major.*?)(?=### Minor|\Z)', section, re.DOTALL)
+    text = relevant.group(1) if relevant else section
+    titles = re.findall(r'\*\*([^*\n]+)\*\*', text)
+    return titles[:10]
+
+
+_YT_PATTERNS = None  # compiled once at import time below
+
+
+def _yt_url_ok(url: str) -> bool:
+    """True only for real YouTube video/channel URLs — rejects open-redirect paths."""
+    global _YT_PATTERNS
+    if _YT_PATTERNS is None:
+        import re as _re2
+        _YT_PATTERNS = _re2.compile(
+            r'^https://(?:'
+            r'www\.youtube\.com/watch\?[^\s<>"]*v=[A-Za-z0-9_-]+'
+            r'|www\.youtube\.com/shorts/[A-Za-z0-9_-]+'
+            r'|www\.youtube\.com/@[A-Za-z0-9_\-./]+'
+            r'|www\.youtube\.com/channel/[A-Za-z0-9_-]+'
+            r'|youtu\.be/[A-Za-z0-9_-]+'
+            r')'
+        )
+    return bool(_YT_PATTERNS.match(url))
+
+
+def find_videos(ai_client, issue_titles: list[str]) -> list[dict]:
+    """
+    Use Claude with the Anthropic web_search server tool to find YouTube
+    instructional videos for the given golf swing issues. Returns [] on any error.
+    """
+    import re, json
+    print(f"  [videos] issue_titles={issue_titles}")
+    if not issue_titles:
+        print("  [videos] no issue titles extracted — skipping")
+        return []
+    try:
+        issues_str = "\n".join(f"- {t}" for t in issue_titles)
+        prompt = (
+            "A golfer's swing analysis identified these issues:\n"
+            f"{issues_str}\n\n"
+            "Search YouTube and find 1–2 helpful golf instructional videos for each issue. "
+            "Reply with ONLY a JSON array, no other text:\n"
+            '[{"issue":"issue title","title":"YouTube video title",'
+            '"url":"https://www.youtube.com/watch?v=VIDEOID","why":"one sentence why this helps"}]'
+        )
+        print("  [videos] calling claude-haiku-4-5 with web_search tool...")
+        resp = ai_client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=2000,
+            tools=[{"type": "web_search_20260209", "name": "web_search"}],
+            messages=[{"role": "user", "content": prompt}],
+        )
+        print(f"  [videos] response stop_reason={resp.stop_reason} "
+              f"content_types={[getattr(b,'type','?') for b in resp.content]}")
+        text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
+        print(f"  [videos] raw text (first 400 chars): {text[:400]!r}")
+        m = re.search(r'\[.*?\]', text, re.DOTALL)
+        if not m:
+            # Try non-greedy didn't work — try greedy
+            m = re.search(r'\[.*\]', text, re.DOTALL)
+        if not m:
+            print("  [videos] no JSON array found in response")
+            return []
+        raw = json.loads(m.group(0))
+        safe = []
+        for v in raw:
+            url = str(v.get("url", ""))
+            if not _yt_url_ok(url):
+                print(f"  [videos] rejected URL: {url!r}")
+                continue
+            safe.append({
+                "issue": str(v.get("issue", ""))[:200],
+                "title": str(v.get("title", ""))[:200],
+                "url": url,
+                "why":   str(v.get("why",   ""))[:300],
+            })
+        print(f"  [videos] found {len(safe)} valid videos")
+        return safe
+    except Exception as exc:
+        import traceback
+        print(f"  [videos] find_videos failed: {exc}")
+        traceback.print_exc()
+        return []
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -1156,12 +1247,18 @@ def analyze():
         for b64 in back_frames:
             frames_payload.append({"view": "Back", "phase": "", "data": b64})
 
+    # --- Video recommendations (Haiku + web search) — resilient, never blocks main response ---
+    print("Finding YouTube video recommendations [claude-haiku-4-5 + web_search]...")
+    issue_titles = _extract_major_moderate_issues(analysis_text)
+    videos = find_videos(ai_client, issue_titles)
+
     return jsonify({
         "analysis": analysis_text,
         "frames": frames_payload,
         "agent_reports": [
             {"name": a["name"], "report": agent_reports[a["name"]]} for a in AGENTS
         ],
+        "videos": videos,
     })
 
 
