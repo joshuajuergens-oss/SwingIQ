@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwingIQ — Swing History</title>
+  {% include "_styles.html" %}
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a class="nav-logo" href="/">
+      <div class="logo-mark">⛳</div>
+      <span class="logo-text">Swing<span>IQ</span></span>
+      <span class="nav-badge">Pro</span>
+    </a>
+    <div class="nav-right">
+      <a class="nav-link" href="/">Dashboard</a>
+      <a class="nav-link" href="/history">History</a>
+      <a class="nav-link" href="#">Settings</a>
+    </div>
+  </div>
+</nav>
+
+<div style="max-width:1100px;margin:0 auto;padding:2rem 1.5rem;">
+
+  <!-- HISTORY LIST -->
+  <div id="historyView">
+    <div class="results-header" style="display:flex;justify-content:space-between;align-items:center;">
+      <div class="results-title">Your Swing History</div>
+      <button type="button" id="clearHistoryBtn" class="window-btn">Clear All</button>
+    </div>
+    <p style="font-size:0.85rem;color:var(--gray-600);margin-bottom:1.25rem;">
+      Saved on this device only. Click any past analysis to open it again.
+    </p>
+    <div id="historyList"></div>
+    <div id="historyEmpty" style="text-align:center;color:var(--gray-400);padding:3rem 1rem;display:none;">
+      No saved analyses yet.<br>
+      <a href="/" style="color:var(--green);font-weight:600;">Analyze your first swing →</a>
+    </div>
+  </div>
+
+  <!-- RESULTS (shown when a history entry is opened) -->
+  <div id="results" style="display:none;">
+    <button type="button" id="backToList" class="window-btn" style="margin-bottom:1rem;">← Back to history</button>
+    <div class="results-header">
+      <div class="results-title" id="resultsTitle">Swing Analysis Report</div>
+      <div class="results-meta" id="resultsMeta"></div>
+    </div>
+
+    <div class="frames-section" id="framesSection" style="display:none">
+      <div class="frames-section-title">
+        🦴 Key Swing Positions <span class="badge">AI-selected</span>
+      </div>
+      <div class="frames-tabs" id="framesTabs"></div>
+      <div class="frames-grid" id="framesGrid"></div>
+    </div>
+
+    <div class="analysis-card" id="analysisContent"></div>
+    <div class="specialist-section" id="agentReports"></div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">Swing<span>IQ</span></div>
+  <div class="footer-sub">AI-powered golf coaching · Powered by Claude &amp; MediaPipe</div>
+</footer>
+
+<script>
+  const HISTORY_KEY = 'swingiq_history';
+  const historyView = document.getElementById('historyView');
+  const results     = document.getElementById('results');
+  const historyList = document.getElementById('historyList');
+  const historyEmpty = document.getElementById('historyEmpty');
+
+  function loadHistory() {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY)) || []; }
+    catch (_) { return []; }
+  }
+
+  function renderMarkdown(text) {
+    return text
+      .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/^- (.+)$/gm, '<li>$1</li>')
+      .replace(/(<li>.*<\/li>\n?)+/gs, m => `<ul>${m}</ul>`)
+      .replace(/^(\d+)\. (.+)$/gm, '<li>$2</li>')
+      .replace(/\n\n+/g, '</p><p>')
+      .trim();
+  }
+
+  function displayResult(data, club, whenStr) {
+    historyView.style.display = 'none';
+    results.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    document.getElementById('resultsTitle').textContent = club ? `${club} Analysis Report` : 'Swing Analysis Report';
+    document.getElementById('resultsMeta').textContent  = whenStr || '';
+
+    const framesSection = document.getElementById('framesSection');
+    const framesTabs    = document.getElementById('framesTabs');
+    const framesGrid    = document.getElementById('framesGrid');
+    framesTabs.innerHTML = '';
+    framesGrid.innerHTML = '';
+    if (data.frames && data.frames.length > 0) {
+      const views = [...new Set(data.frames.map(f => f.view))];
+      function renderFrames(filterView) {
+        framesGrid.innerHTML = '';
+        let n = 0;
+        data.frames.forEach(f => {
+          if (filterView !== 'All' && f.view !== filterView) return;
+          const stage = f.phase || `Frame ${++n}`;
+          const card = document.createElement('div');
+          card.className = 'frame-card';
+          card.innerHTML = `<img src="data:image/jpeg;base64,${f.data}" alt="${f.view} ${stage}" loading="lazy"/>
+            <div class="frame-card-label">${f.view} · ${stage}</div>`;
+          framesGrid.appendChild(card);
+        });
+      }
+      ['All', ...views].forEach((v, i) => {
+        const btn = document.createElement('button');
+        btn.className = 'frame-tab' + (i === 0 ? ' active' : '');
+        btn.textContent = v === 'All' ? `All (${data.frames.length})` : `${v} View`;
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.frame-tab').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          renderFrames(v);
+        });
+        framesTabs.appendChild(btn);
+      });
+      renderFrames('All');
+      framesSection.style.display = 'block';
+    } else {
+      framesSection.style.display = 'none';
+    }
+
+    document.getElementById('analysisContent').innerHTML = `<p>${renderMarkdown(data.analysis)}</p>`;
+
+    const agentReportsEl = document.getElementById('agentReports');
+    agentReportsEl.innerHTML = '';
+    if (data.agent_reports && data.agent_reports.length > 0) {
+      const heading = document.createElement('p');
+      heading.className = 'specialist-section-title';
+      heading.textContent = 'Individual Specialist Reports';
+      agentReportsEl.appendChild(heading);
+      const icons = { 'Body & Posture Coach': '🧍', 'Club & Hands Coach': '🏌️', 'Tempo & Rhythm Coach': '🎵' };
+      data.agent_reports.forEach(r => {
+        const det = document.createElement('details');
+        det.className = 'specialist';
+        const icon = icons[r.name] || '👤';
+        det.innerHTML = `
+          <summary>${icon} ${r.name}</summary>
+          <div class="specialist-body analysis-card" style="border:none;border-radius:0;box-shadow:none;margin:0;padding:1.5rem">
+            <p>${renderMarkdown(r.report)}</p>
+          </div>`;
+        agentReportsEl.appendChild(det);
+      });
+    }
+  }
+
+  function renderHistory() {
+    const history = loadHistory();
+    historyList.innerHTML = '';
+    historyEmpty.style.display = history.length ? 'none' : 'block';
+    history.forEach(entry => {
+      const card = document.createElement('div');
+      card.className = 'analysis-card';
+      card.style.cssText = 'cursor:pointer;margin-bottom:0.75rem;padding:1rem 1.25rem;display:flex;justify-content:space-between;align-items:center;';
+      const title = entry.club ? `${entry.club} Swing` : 'Swing Analysis';
+      card.innerHTML = `
+        <div>
+          <div style="font-weight:600;">${title}</div>
+          <div style="font-size:0.8rem;color:var(--gray-400);">${entry.date}</div>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+          <span class="window-btn green" style="pointer-events:none;">View →</span>
+          <button class="window-btn" data-del="${entry.id}" title="Delete">✕</button>
+        </div>`;
+      card.addEventListener('click', e => {
+        if (e.target.dataset.del) return;
+        displayResult(entry.data, entry.club, entry.date);
+      });
+      historyList.appendChild(card);
+    });
+    historyList.querySelectorAll('[data-del]').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const id = Number(btn.dataset.del);
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(loadHistory().filter(h => h.id !== id)));
+        renderHistory();
+      });
+    });
+  }
+
+  document.getElementById('backToList').addEventListener('click', () => {
+    results.style.display = 'none';
+    historyView.style.display = 'block';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  document.getElementById('clearHistoryBtn').addEventListener('click', () => {
+    if (confirm('Delete all saved swing analyses on this device?')) {
+      localStorage.removeItem(HISTORY_KEY);
+      renderHistory();
+    }
+  });
+
+  renderHistory();
+</script>
+</body>
+</html>
