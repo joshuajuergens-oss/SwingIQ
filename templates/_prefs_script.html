@@ -1,0 +1,16 @@
+<script>
+  // Apply saved appearance/accessibility prefs as early as possible (avoids flash).
+  (function () {
+    var d = document.documentElement;
+    var t = localStorage.getItem('swingiq_theme');
+    if (t === 'dark') d.setAttribute('data-theme', 'dark');
+    else if (t === 'system') {
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        d.setAttribute('data-theme', 'dark');
+    }
+    var f = localStorage.getItem('swingiq_fontsize');
+    if (f) d.setAttribute('data-fontsize', f);
+    if (localStorage.getItem('swingiq_reducemotion') === '1') d.setAttribute('data-motion', 'reduced');
+    if (localStorage.getItem('swingiq_contrast') === '1') d.setAttribute('data-contrast', 'high');
+  })();
+</script>

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SwingIQ — AI Golf Coach</title>
   {% include "_styles.html" %}
+  {% include "_prefs_script.html" %}
 </head>
 <body>
 
@@ -19,7 +20,7 @@
     <div class="nav-right">
       <a class="nav-link" href="/">Dashboard</a>
       <a class="nav-link" href="/history">History</a>
-      <a class="nav-link" href="#">Settings</a>
+      <a class="nav-link" href="/settings">Settings</a>
     </div>
   </div>
 </nav>
@@ -352,6 +353,13 @@
     btn.classList.add('selected');
     selectedClubInput.value = btn.dataset.club;
   });
+
+  // Pre-select the default club saved in Settings
+  const defaultClub = localStorage.getItem('swingiq_default_club') || '';
+  if (defaultClub) {
+    const defBtn = [...document.querySelectorAll('.club-btn')].find(b => b.dataset.club === defaultClub);
+    if (defBtn) { defBtn.classList.add('selected'); selectedClubInput.value = defaultClub; }
+  }
 
   function setupVideoInput(input, card, nameEl, preview) {
     input.addEventListener('change', () => {

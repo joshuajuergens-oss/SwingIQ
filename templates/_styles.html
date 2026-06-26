@@ -20,6 +20,41 @@
       --radius:      12px;
     }
 
+    /* ── Dark theme (set via data-theme="dark" on <html>) ── */
+    html[data-theme="dark"] {
+      --green-bg:  #16271a;
+      --gray-900:  #f3f4f6;
+      --gray-800:  #e5e7eb;
+      --gray-600:  #b3b9c4;
+      --gray-400:  #8a909c;
+      --gray-200:  #2e2e34;
+      --gray-100:  #131316;
+      --white:     #1e1e22;
+      --shadow-sm: 0 1px 3px rgba(0,0,0,.4);
+      --shadow-md: 0 4px 16px rgba(0,0,0,.5);
+      --shadow-lg: 0 10px 40px rgba(0,0,0,.6);
+    }
+
+    /* ── Accessibility prefs ── */
+    html[data-fontsize="large"]  { font-size: 112.5%; }
+    html[data-fontsize="xlarge"] { font-size: 125%; }
+    html[data-contrast="high"] {
+      --gray-600: #000000;
+      --gray-400: #333333;
+    }
+    html[data-theme="dark"][data-contrast="high"] {
+      --gray-600: #ffffff;
+      --gray-400: #cccccc;
+    }
+    html[data-motion="reduced"] *,
+    html[data-motion="reduced"] *::before,
+    html[data-motion="reduced"] *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
       background: var(--gray-100);

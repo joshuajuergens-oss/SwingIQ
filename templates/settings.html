@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SwingIQ — Settings</title>
+  {% include "_styles.html" %}
+  {% include "_prefs_script.html" %}
+  <style>
+    .settings-wrap { max-width:1000px; margin:0 auto; padding:2rem 1.5rem; display:grid; grid-template-columns:220px 1fr; gap:1.5rem; }
+    .settings-menu { display:flex; flex-direction:column; gap:.25rem; }
+    .settings-menu button {
+      text-align:left; padding:.7rem 1rem; border:none; background:transparent; border-radius:8px;
+      font-size:.92rem; font-weight:600; color:var(--gray-600); cursor:pointer; transition:all .15s;
+    }
+    .settings-menu button:hover { background:var(--gray-200); }
+    .settings-menu button.active { background:var(--green); color:#fff; }
+    .settings-panel { display:none; }
+    .settings-panel.active { display:block; }
+    .settings-panel h2 { font-size:1.4rem; margin-bottom:.25rem; }
+    .settings-panel .sub { color:var(--gray-600); font-size:.88rem; margin-bottom:1.5rem; }
+    .field { margin-bottom:1.25rem; }
+    .field label { display:block; font-weight:600; font-size:.85rem; margin-bottom:.4rem; }
+    .field input, .field select {
+      width:100%; padding:.7rem .9rem; border:2px solid var(--gray-200); border-radius:8px;
+      background:var(--white); color:var(--gray-900); font-size:.95rem;
+    }
+    .field .hint { font-size:.78rem; color:var(--gray-400); margin-top:.35rem; }
+    .toggle-row { display:flex; justify-content:space-between; align-items:center; padding:.9rem 0; border-bottom:1px solid var(--gray-200); }
+    .toggle-row:last-child { border-bottom:none; }
+    .toggle-row .t-label { font-weight:600; font-size:.9rem; }
+    .toggle-row .t-desc { font-size:.78rem; color:var(--gray-400); }
+    .switch { position:relative; width:46px; height:26px; flex-shrink:0; }
+    .switch input { opacity:0; width:0; height:0; }
+    .slider { position:absolute; inset:0; background:var(--gray-400); border-radius:26px; cursor:pointer; transition:.2s; }
+    .slider::before { content:""; position:absolute; height:20px; width:20px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.2s; }
+    .switch input:checked + .slider { background:var(--green); }
+    .switch input:checked + .slider::before { transform:translateX(20px); }
+    .save-row { margin-top:1.5rem; display:flex; align-items:center; gap:1rem; }
+    .saved-msg { color:var(--green); font-weight:600; font-size:.85rem; opacity:0; transition:opacity .2s; }
+    .saved-msg.show { opacity:1; }
+    @media (max-width:700px){ .settings-wrap{ grid-template-columns:1fr; } .settings-menu{ flex-direction:row; flex-wrap:wrap; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-inner">
+    <a class="nav-logo" href="/">
+      <div class="logo-mark">⛳</div>
+      <span class="logo-text">Swing<span>IQ</span></span>
+      <span class="nav-badge">Pro</span>
+    </a>
+    <div class="nav-right">
+      <a class="nav-link" href="/">Dashboard</a>
+      <a class="nav-link" href="/history">History</a>
+      <a class="nav-link" href="/settings">Settings</a>
+    </div>
+  </div>
+</nav>
+
+<div class="settings-wrap">
+  <!-- Menu -->
+  <div class="settings-menu">
+    <button data-panel="profile" class="active">Profile</button>
+    <button data-panel="account">Account</button>
+    <button data-panel="appearance">Appearance</button>
+    <button data-panel="accessibility">Accessibility</button>
+    <button data-panel="notifications">Notifications</button>
+  </div>
+
+  <!-- Panels -->
+  <div class="settings-content">
+
+    <!-- PROFILE -->
+    <div class="settings-panel active" id="panel-profile">
+      <h2>Profile</h2>
+      <div class="sub">Tell us about your game. Used to tailor your analyses.</div>
+      <div class="field">
+        <label>Name</label>
+        <input type="text" id="p-name" placeholder="Your name" />
+      </div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="p-email" placeholder="you@example.com" />
+        <div class="hint">Used for your free daily analysis.</div>
+      </div>
+      <div class="field">
+        <label>Handicap</label>
+        <input type="text" id="p-handicap" placeholder="e.g. 14 (or 'beginner')" />
+      </div>
+      <div class="field">
+        <label>Default Club</label>
+        <select id="p-club">
+          <option value="">No default</option>
+          <option>Driver</option><option>3-Wood</option><option>5-Wood</option><option>Hybrid</option>
+          <option>4-Iron</option><option>5-Iron</option><option>6-Iron</option><option>7-Iron</option>
+          <option>8-Iron</option><option>9-Iron</option><option>Pitching Wedge</option>
+          <option>Gap Wedge</option><option>Sand Wedge</option><option>Lob Wedge</option><option>Putter</option>
+        </select>
+      </div>
+      <div class="save-row">
+        <button class="window-btn green" data-save="profile">Save Profile</button>
+        <span class="saved-msg" id="saved-profile">✓ Saved</span>
+      </div>
+    </div>
+
+    <!-- ACCOUNT -->
+    <div class="settings-panel" id="panel-account">
+      <h2>Account</h2>
+      <div class="sub">Manage your API key and saved data.</div>
+      <div class="field">
+        <label>Anthropic API Key</label>
+        <input type="password" id="a-key" placeholder="sk-ant-api03-…" autocomplete="off" spellcheck="false" />
+        <div class="hint">Stored only in this browser, never on our servers. Lets you run unlimited analyses. Get one at
+          <a href="https://console.anthropic.com/settings/api-keys" target="_blank" style="color:var(--green)">console.anthropic.com</a>.</div>
+      </div>
+      <div class="save-row">
+        <button class="window-btn green" data-save="account">Save Key</button>
+        <span class="saved-msg" id="saved-account">✓ Saved</span>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--gray-200);margin:1.75rem 0;">
+      <div class="field">
+        <label>Saved Data</label>
+        <div class="hint" style="margin-bottom:.75rem;">Your swing history and settings live in this browser only.</div>
+        <button class="window-btn" id="clear-history">Clear Swing History</button>
+        <button class="window-btn" id="clear-all" style="border-color:#c0392b;color:#c0392b;">Delete All My Data</button>
+      </div>
+    </div>
+
+    <!-- APPEARANCE -->
+    <div class="settings-panel" id="panel-appearance">
+      <h2>Appearance</h2>
+      <div class="sub">Customize how SwingIQ looks. Applies instantly across all pages.</div>
+      <div class="field">
+        <label>Theme</label>
+        <select id="ap-theme">
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="system">Match system</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ACCESSIBILITY -->
+    <div class="settings-panel" id="panel-accessibility">
+      <h2>Accessibility</h2>
+      <div class="sub">Make SwingIQ easier to use. Applies instantly.</div>
+      <div class="field">
+        <label>Text Size</label>
+        <select id="ac-fontsize">
+          <option value="normal">Normal</option>
+          <option value="large">Large</option>
+          <option value="xlarge">Extra Large</option>
+        </select>
+      </div>
+      <div class="toggle-row">
+        <div><div class="t-label">Reduce Motion</div><div class="t-desc">Minimize animations and smooth scrolling.</div></div>
+        <label class="switch"><input type="checkbox" id="ac-motion"><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="t-label">High Contrast</div><div class="t-desc">Darken text for better readability.</div></div>
+        <label class="switch"><input type="checkbox" id="ac-contrast"><span class="slider"></span></label>
+      </div>
+    </div>
+
+    <!-- NOTIFICATIONS -->
+    <div class="settings-panel" id="panel-notifications">
+      <h2>Notifications</h2>
+      <div class="sub">Choose what you'd like to hear about. Preferences are saved on this device.</div>
+      <div class="toggle-row">
+        <div><div class="t-label">Analysis Complete</div><div class="t-desc">Notify me when my swing analysis is ready.</div></div>
+        <label class="switch"><input type="checkbox" id="n-results"><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="t-label">Weekly Practice Tips</div><div class="t-desc">Get a weekly drill based on your swings.</div></div>
+        <label class="switch"><input type="checkbox" id="n-tips"><span class="slider"></span></label>
+      </div>
+      <div class="toggle-row">
+        <div><div class="t-label">Product Updates</div><div class="t-desc">New features and improvements.</div></div>
+        <label class="switch"><input type="checkbox" id="n-product"><span class="slider"></span></label>
+      </div>
+      <div class="save-row">
+        <button class="window-btn green" data-save="notifications">Save Preferences</button>
+        <span class="saved-msg" id="saved-notifications">✓ Saved</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<footer>
+  <div class="footer-logo">Swing<span>IQ</span></div>
+  <div class="footer-sub">AI-powered golf coaching · Powered by Claude &amp; MediaPipe</div>
+</footer>
+
+<script>
+  const $ = id => document.getElementById(id);
+
+  // ── Menu switching ──
+  document.querySelectorAll('.settings-menu button').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.settings-menu button').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      $('panel-' + btn.dataset.panel).classList.add('active');
+    });
+  });
+
+  function flash(name) {
+    const el = $('saved-' + name);
+    if (!el) return;
+    el.classList.add('show');
+    setTimeout(() => el.classList.remove('show'), 1600);
+  }
+
+  // ── Load saved values ──
+  $('p-name').value     = localStorage.getItem('swingiq_name') || '';
+  $('p-email').value    = localStorage.getItem('swingiq_email') || '';
+  $('p-handicap').value = localStorage.getItem('swingiq_handicap') || '';
+  $('p-club').value     = localStorage.getItem('swingiq_default_club') || '';
+  $('a-key').value      = localStorage.getItem('swingiq_api_key') || '';
+  $('ap-theme').value   = localStorage.getItem('swingiq_theme') || 'light';
+  $('ac-fontsize').value = localStorage.getItem('swingiq_fontsize') || 'normal';
+  $('ac-motion').checked   = localStorage.getItem('swingiq_reducemotion') === '1';
+  $('ac-contrast').checked = localStorage.getItem('swingiq_contrast') === '1';
+  $('n-results').checked = localStorage.getItem('swingiq_notif_results') !== '0';
+  $('n-tips').checked    = localStorage.getItem('swingiq_notif_tips') === '1';
+  $('n-product').checked = localStorage.getItem('swingiq_notif_product') === '1';
+
+  // ── Save buttons ──
+  document.querySelectorAll('[data-save]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const what = btn.dataset.save;
+      if (what === 'profile') {
+        localStorage.setItem('swingiq_name', $('p-name').value.trim());
+        localStorage.setItem('swingiq_email', $('p-email').value.trim());
+        localStorage.setItem('swingiq_handicap', $('p-handicap').value.trim());
+        localStorage.setItem('swingiq_default_club', $('p-club').value);
+      } else if (what === 'account') {
+        const k = $('a-key').value.trim();
+        if (k) localStorage.setItem('swingiq_api_key', k);
+        else localStorage.removeItem('swingiq_api_key');
+      } else if (what === 'notifications') {
+        localStorage.setItem('swingiq_notif_results', $('n-results').checked ? '1' : '0');
+        localStorage.setItem('swingiq_notif_tips',    $('n-tips').checked ? '1' : '0');
+        localStorage.setItem('swingiq_notif_product', $('n-product').checked ? '1' : '0');
+      }
+      flash(what);
+    });
+  });
+
+  // ── Appearance + accessibility apply instantly ──
+  function applyPrefs() {
+    const d = document.documentElement;
+    const theme = $('ap-theme').value;
+    if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches))
+      d.setAttribute('data-theme', 'dark');
+    else d.removeAttribute('data-theme');
+
+    const fs = $('ac-fontsize').value;
+    if (fs && fs !== 'normal') d.setAttribute('data-fontsize', fs); else d.removeAttribute('data-fontsize');
+    if ($('ac-motion').checked) d.setAttribute('data-motion', 'reduced'); else d.removeAttribute('data-motion');
+    if ($('ac-contrast').checked) d.setAttribute('data-contrast', 'high'); else d.removeAttribute('data-contrast');
+  }
+
+  $('ap-theme').addEventListener('change', () => { localStorage.setItem('swingiq_theme', $('ap-theme').value); applyPrefs(); });
+  $('ac-fontsize').addEventListener('change', () => { localStorage.setItem('swingiq_fontsize', $('ac-fontsize').value); applyPrefs(); });
+  $('ac-motion').addEventListener('change', () => { localStorage.setItem('swingiq_reducemotion', $('ac-motion').checked ? '1' : '0'); applyPrefs(); });
+  $('ac-contrast').addEventListener('change', () => { localStorage.setItem('swingiq_contrast', $('ac-contrast').checked ? '1' : '0'); applyPrefs(); });
+
+  // ── Data management ──
+  $('clear-history').addEventListener('click', () => {
+    if (confirm('Delete all saved swing analyses on this device?')) {
+      localStorage.removeItem('swingiq_history');
+      alert('Swing history cleared.');
+    }
+  });
+  $('clear-all').addEventListener('click', () => {
+    if (confirm('This deletes ALL your SwingIQ data on this device — history, profile, settings, and saved key. Continue?')) {
+      Object.keys(localStorage).filter(k => k.startsWith('swingiq_')).forEach(k => localStorage.removeItem(k));
+      alert('All data deleted.');
+      location.reload();
+    }
+  });
+</script>
+</body>
+</html>

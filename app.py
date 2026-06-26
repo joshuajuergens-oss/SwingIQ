@@ -777,6 +777,11 @@ def history():
     return render_template("history.html")
 
 
+@app.route("/settings")
+def settings():
+    return render_template("settings.html")
+
+
 @app.route("/usage-status")
 def usage_status():
     ip = _get_ip()
